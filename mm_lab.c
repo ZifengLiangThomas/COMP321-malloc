@@ -27,7 +27,7 @@
  ********************************************************/
 team_t team = {
 	/* Team name */
-	"/* Team name */",
+	"/* phallic */",
 	/* First member's full name */
 	"Xin Huang",
 	/* First member's email address */
