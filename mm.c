@@ -39,6 +39,7 @@ team_t team = {
 };
 
 /* Basic constants and macros: */
+#define ASIZE	   8		  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define CHUNKSIZE  (1 << 12)      /* Extend heap by this amount (bytes) */
@@ -53,7 +54,7 @@ team_t team = {
 #define PUT(p, val)  (*(uintptr_t *)(p) = (val))
 
 /* Read the size and allocated fields from address p. */
-#define GET_SIZE(p)   (GET(p) & ~(DSIZE - 1))
+#define GET_SIZE(p)   (GET(p) & ~(ASIZE - 1))
 #define GET_ALLOC(p)  (GET(p) & 0x1)
 
 /* Given block ptr bp, compute address of its header and footer. */
@@ -91,13 +92,13 @@ mm_init(void)
 {
 
 	/* Create the initial empty heap. */
-	if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1)
+	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
 		return (-1);
-	PUT(heap_listp, 0);                            /* Alignment padding */
-	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */ 
-	PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
-	PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
-	heap_listp += (2 * WSIZE);
+	//PUT(heap_listp, 0);                            /* Alignment padding */
+	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
+	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
+	heap_listp += (WSIZE);
 
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
 	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -126,10 +127,10 @@ mm_malloc(size_t size)
 		return (NULL);
 
 	/* Adjust block size to include overhead and alignment reqs. */
-	if (size <= DSIZE)
-		asize = 2 * DSIZE;
+	if (size <= ASIZE)
+		asize = ASIZE + DSIZE;
 	else
-		asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
+		asize = ASIZE * ((size + DSIZE + (ASIZE - 1)) / ASIZE);
 
 	/* Search the free list for a fit. */
 	if ((bp = find_fit(asize)) != NULL) {
@@ -318,7 +319,7 @@ place(void *bp, size_t asize)
 {
 	size_t csize = GET_SIZE(HDRP(bp));   
 
-	if ((csize - asize) >= (2 * DSIZE)) { 
+	if ((csize - asize) >= (ASIZE + DSIZE)) { 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		bp = NEXT_BLKP(bp);
@@ -345,8 +346,8 @@ static void
 checkblock(void *bp) 
 {
 
-	if ((uintptr_t)bp % DSIZE)
-		printf("Error: %p is not doubleword aligned\n", bp);
+	if ((uintptr_t)bp % ASIZE)
+		printf("Error: %p is not word aligned\n", bp);
 	if (GET(HDRP(bp)) != GET(FTRP(bp)))
 		printf("Error: header does not match footer\n");
 }
