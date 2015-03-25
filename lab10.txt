@@ -1,0 +1,31 @@
+Exercise 1
+
+Adding the -pg tag in the Makefile to enable profiling very slightly reduced performance.
+
+
+Exercise 2
+
+After examining the profile, we don't see all of the functions from mm.c because the compiler automatically inlines some of the function calls to increase performance.
+
+
+Exercise 3
+
+find_fit takes the most time - (82.78%), 7.33 s - when we ran all of the trace files
+
+Examining the amptjp-bal.rep and cccp-bal.rep, we found that find_fit consumed the most time.
+
+The find_fit function is a first fit function, so every time it searches for a fit, it has to linearly search through the list. To fix this, we could implement a segregated list, which would reduce the search time.
+
+
+
+Exercise 4
+
+Trace 8 (binary2-bal.rep) allocates blocks of 16 and 112 alternating. The even ids are 16, the odds are 112, then it frees all odd blocks and allocates many blocks of size 128. After that it frees everything.
+The issue is that find_fit becomes a linear search again in the 128 bucket. To fix this, we could order the free blocks by size descending instead of ascending. It may however be costly to order the blocks. We might also be able to implement a segregated list adn change the sizes of our buckets setting the upper bound of the lowest bucket at 127 to avoid splitting the blocks of size 128.
+
+
+
+Exercise 5
+
+Trace 9 (realloc-bal.rep) 
+eval_mm_valid takes the most time because the explicit free list can handle the order of the allocate, reallocate, and free calls (alternating with realloc requiring progressively more space). Coalescing takes the second most amount of time because the alternating order of alloc, realloc, and free calls results in consecutive unused blocks being coalesced.
