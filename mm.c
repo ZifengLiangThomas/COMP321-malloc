@@ -198,7 +198,7 @@ mm_free(void *bp)
 	new_node = (struct node *)coalesce(bp);
 	
 	/* Add to beginning of free list after coalescing */
-	new_node->next = list_head;
+	new_node->next = list_start;
 	new_node->previous = NULL;
 	list_start->previous = new_node;
 	list_start = new_node;
