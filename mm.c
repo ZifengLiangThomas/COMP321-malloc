@@ -27,7 +27,7 @@
  ********************************************************/
 team_t team = {
 	/* Team name */
-	"/* Free() Phallic() */",
+	"/* Team name */",
 	/* First member's full name */
 	"Xin Huang",
 	/* First member's email address */
@@ -38,10 +38,16 @@ team_t team = {
 	"lpm2@rice.edu"
 };
 
+struct node {
+	struct node *next;
+	struct node *previous;
+};
+
 /* Basic constants and macros: */
 #define ASIZE	   8		  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
+#define QSIZE	   (4 * WSIZE)	  /* Quadword size (bytes) */
 #define CHUNKSIZE  (1 << 12)      /* Extend heap by this amount (bytes) */
 
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))  
@@ -61,16 +67,19 @@ team_t team = {
 #define HDRP(bp)  ((char *)(bp) - WSIZE)
 #define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
+
+
 /* Given block ptr bp, compute address of next and previous blocks. */
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
 /* Global variables: */
-static char *heap_listp; /* Pointer to first block */  
+static char *heap_listp; /* Pointer to first block */
+static struct node *list_start;
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
-static void *extend_heap(size_t words);
+static void *extend_heap(size_t words, struct node *next);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
@@ -78,6 +87,8 @@ static void place(void *bp, size_t asize);
 static void checkblock(void *bp);
 static void checkheap(bool verbose);
 static void printblock(void *bp); 
+
+
 
 /* 
  * Requires:
@@ -92,16 +103,29 @@ mm_init(void)
 {
 
 	/* Create the initial empty heap. */
-	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
+	
+	struct node *head;
+	
+	if ((heap_listp = mem_sbrk(5 * WSIZE)) == (void *)-1)
 		return (-1);
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
-	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
+	head = (struct node *)heap_listp + 2 * WSIZE;
+	/* Insert the next and previous pointers, the head of the list */
+	/* Can use heap_listp + 2*WSIZE to access head of list */
+	/*PUT(heap_listp + (2 * WSIZE), head.next);
+	PUT(heap_listp + (3 * WSIZE), head.previous);*/
+	head->previous = NULL:
+	head->next = NULL;
+	
+	list_start = &head;
+	
+	PUT(heap_listp + (4 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
 
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
+	if (extend_heap(CHUNKSIZE / WSIZE, head.next) == NULL)
 		return (-1);
 	return (0);
 }
@@ -127,10 +151,12 @@ mm_malloc(size_t size)
 		return (NULL);
 
 	/* Adjust block size to include overhead and alignment reqs. */
+	/* Increased size to 4 words of overhead from 2 */
+	/* Smallest useable block size is now 2 words instead of 1 */
 	if (size <= ASIZE)
-		asize = ASIZE + DSIZE;
+		asize = ASIZE + QSIZE;
 	else
-		asize = ASIZE * ((size + DSIZE + (ASIZE - 1)) / ASIZE);
+		asize = ASIZE * ((size + QSIZE + (ASIZE - 1)) / ASIZE);
 
 	/* Search the free list for a fit. */
 	if ((bp = find_fit(asize)) != NULL) {
@@ -157,6 +183,7 @@ void
 mm_free(void *bp)
 {
 	size_t size;
+	struct node *new_node;
 
 	/* Ignore spurious requests. */
 	if (bp == NULL)
@@ -166,7 +193,13 @@ mm_free(void *bp)
 	size = GET_SIZE(HDRP(bp));
 	PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
-	coalesce(bp);
+	new_node = (struct node *)coalesce(bp);
+	
+	/* Add to beginning of free list after coalescing */
+	new_node->next = list_head;
+	new_node->previous = NULL;
+	list_head->previous = new_node;
+	list_head = new_node;
 }
 
 /*
@@ -258,14 +291,16 @@ coalesce(void *bp)
 
 /* 
  * Requires:
- *   None.
- *
+ *   words: the number of words to increase the heap by
+ *   next: next pointer at the end of the linked list, to be set to the 
+ 	   header of the new block
  * Effects:
  *   Extend the heap with a free block and return that block's address.
  */
 static void *
-extend_heap(size_t words) 
+extend_heap(size_t words, struct node *next) 
 {
+	struct node *new_node;
 	size_t size;
 	void *bp;
 
@@ -273,6 +308,15 @@ extend_heap(size_t words)
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
+	
+	/* Initialize the new node pointers, next precedes previous */
+	/* The previous point points to the header of the previous block*/	
+	new_node = (struct node *)bp;
+	new_node->next = NULL;
+	new_node->previous = &next;
+	next = new_node;
+	/*PUT(bp, NULL);
+	PUT(bp + WSIZE, HDRP(next));*/
 
 	/* Initialize free block header/footer and the epilogue header. */
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
@@ -294,13 +338,23 @@ extend_heap(size_t words)
 static void *
 find_fit(size_t asize)
 {
-	void *bp;
-
-	/* Search for the first fit. */
+	//void *bp;
+	struct node *cur = list_start;
+	//bp = heap_listp + 2 * WSIZE;  
+	
+	
+	/* Iterate through the list, find first fit */
+	while (cur != NULL) {
+		if (asize <= GET_SIZE(HDRP(cur))
+			return cur;
+		cur = cur->next;
+	}
+	
+	/* Search for the first fit. 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
 		if (!GET_ALLOC(HDRP(bp)) && asize <= GET_SIZE(HDRP(bp)))
 			return (bp);
-	}
+	} */
 	/* No fit was found. */
 	return (NULL);
 }
@@ -319,7 +373,8 @@ place(void *bp, size_t asize)
 {
 	size_t csize = GET_SIZE(HDRP(bp));   
 
-	if ((csize - asize) >= (ASIZE + DSIZE)) { 
+	/* increased size to account for next and previous pointer overhead */
+	if ((csize - asize) >= (ASIZE + QSIZE)) { 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		bp = NEXT_BLKP(bp);
