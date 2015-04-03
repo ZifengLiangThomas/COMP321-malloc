@@ -83,6 +83,8 @@ static void *extend_heap(size_t words, struct node *next);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
+static void splice(struct node *nodep);
+
 /* Function prototypes for heap consistency checker routines: */
 static void checkblock(void *bp);
 static void checkheap(bool verbose);
@@ -274,16 +276,20 @@ coalesce(void *bp)
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
+		splice((struct node *)NEXT_BLKP(bp));
 	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 		PUT(FTRP(bp), PACK(size, 0));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		splice((struct node *)bp);
 		bp = PREV_BLKP(bp);
 	} else {                                        /* Case 4 */
 		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 		    GET_SIZE(FTRP(NEXT_BLKP(bp)));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+		splice((struct node *)bp);
+		splice((struct node *)NEXT_BLKP(bp));
 		bp = PREV_BLKP(bp);
 	}
 	return (bp);
@@ -340,7 +346,6 @@ find_fit(size_t asize)
 {
 	//void *bp;
 	struct node *cur = list_start;
-	//bp = heap_listp + 2 * WSIZE;  
 	
 	
 	/* Iterate through the list, find first fit */
@@ -371,19 +376,52 @@ find_fit(size_t asize)
 static void
 place(void *bp, size_t asize)
 {
-	size_t csize = GET_SIZE(HDRP(bp));   
+	size_t csize = GET_SIZE(HDRP(bp));
+	struct node *nodep = (struct node *) bp;
+	struct node *new_nodep;
 
 	/* increased size to account for next and previous pointer overhead */
 	if ((csize - asize) >= (ASIZE + QSIZE)) { 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
+		
 		bp = NEXT_BLKP(bp);
 		PUT(HDRP(bp), PACK(csize - asize, 0));
 		PUT(FTRP(bp), PACK(csize - asize, 0));
+		
+		/* Set new node for the leftover free block */
+		new_nodep = (struct node *)bp;
+		
+		new_nodep->previous = nodep->previous;
+		new_nodep->next = nodep->next;
+				
+		/* Remove node from allocated block */
+		nodep->previous->next = nodep->next;
+		nodep->next-previous = nodep->previous;
+		nodep->next = NULL;
+		nodep->previous = NULL;
+		
+		
 	} else {
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
+		
+		/* Remove node from allocated block */
+		nodep->previous->next = nodep->next;
+		nodep->next-previous = nodep->previous;
+		nodep->next = NULL;
+		nodep->previous = NULL;
 	}
+}
+
+static void
+splice(struct node *nodep)
+{
+	nodep->previous->next = nodep->next;
+	nodep->next-previous = nodep->previous;
+	nodep->next = NULL;
+	nodep->previous = NULL;
+
 }
 
 /* 
