@@ -138,6 +138,7 @@ mm_init(void)
 		if (list_start == NULL)
 			printf("List start is NULL!\n");	
 	}
+	checkheap(1);
 
 	return (0);
 }
@@ -181,6 +182,7 @@ mm_malloc(size_t size)
 	if ((bp = extend_heap(extendsize / WSIZE, list_start)) == NULL)  
 		return (NULL);
 	place(bp, asize);
+	checkheap(1);
 	return (bp);
 } 
 
@@ -196,7 +198,7 @@ mm_free(void *bp)
 {
 	size_t size;
 	struct node *new_node;
-
+	
 	/* Ignore spurious requests. */
 	if (bp == NULL)
 		return;
@@ -212,6 +214,7 @@ mm_free(void *bp)
 	new_node->previous = NULL;
 	list_start->previous = new_node;
 	list_start = new_node;
+	checkheap(1);
 }
 
 /*
@@ -257,7 +260,7 @@ mm_realloc(void *ptr, size_t size)
 
 	/* Free the old block. */
 	mm_free(ptr);
-
+	checkheap(1);
 	return (newptr);
 }
 
@@ -317,6 +320,7 @@ coalesce(void *bp)
 		splice((struct node *)NEXT_BLKP(bp));
 		bp = PREV_BLKP(bp);
 	}
+	checkheap(1);
 	return (bp);
 }
 
@@ -355,6 +359,7 @@ extend_heap(size_t words, struct node *next)
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 	printf("Entering coalesce from extend_heap\n");
 	/* Coalesce if the previous block was free. */
+	checkheap(1);
 	return (coalesce(bp));
 }
 
@@ -430,6 +435,7 @@ place(void *bp, size_t asize)
 		/* Remove node from allocated block */
 		splice(nodep);
 	}
+	checkheap(1);
 }
 
 static void
