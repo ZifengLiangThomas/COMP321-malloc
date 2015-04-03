@@ -107,28 +107,38 @@ mm_init(void)
 	/* Create the initial empty heap. */
 	
 	struct node *head;
-	
+	printf("INIT\n");	
 	if ((heap_listp = mem_sbrk(5 * WSIZE)) == (void *)-1)
 		return (-1);
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+	printf("Set prologue\n");
 	head = (struct node *)heap_listp + 2 * WSIZE;
+	printf("Initialized head to be two words after the prologue start\n");
 	/* Insert the next and previous pointers, the head of the list */
 	/* Can use heap_listp + 2*WSIZE to access head of list */
 	/*PUT(heap_listp + (2 * WSIZE), head.next);
 	PUT(heap_listp + (3 * WSIZE), head.previous);*/
-	head->previous = NULL;
-	head->next = NULL;
-	
+	head->previous = head;
+	head->next = head;	
 	list_start = head;
 	
 	PUT(heap_listp + (4 * WSIZE), PACK(0, 1));     /* Epilogue header */
+	printf("Set header epilogue\n");
 	heap_listp += (WSIZE);
-
+	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE, head->next) == NULL)
+	if (extend_heap(CHUNKSIZE / WSIZE, head->next) == NULL) {
+		printf("Failed INIT\n");
 		return (-1);
+	}
+	if (1) {
+		printf("Completed init!\n");
+		if (list_start == NULL)
+			printf("List start is NULL!\n");	
+	}
+
 	return (0);
 }
 
@@ -147,7 +157,7 @@ mm_malloc(size_t size)
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
-
+	printf("Start malloc\n");
 	/* Ignore spurious requests. */
 	if (size == 0)
 		return (NULL);
@@ -266,24 +276,39 @@ mm_realloc(void *ptr, size_t size)
 static void *
 coalesce(void *bp) 
 {
+	printf("Start coalesce\n");
+	if (bp == NULL)
+		printf("Pointer is NULL\n");
 	size_t size = GET_SIZE(HDRP(bp));
+	printf("Got size\n");
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+	printf("Stored whether previous block was allocated\n");
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-
+	printf("Stored whether the next block was allocated\n");
+	printf("Finished coalesce initializations\n");
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
+		printf("Case 1\n");
 		return (bp);
 	} else if (prev_alloc && !next_alloc) {         /* Case 2 */
+		printf("Case 2\n");
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
 		splice((struct node *)NEXT_BLKP(bp));
 	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
+		printf("Case 3\n");
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 		PUT(FTRP(bp), PACK(size, 0));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-		splice((struct node *)bp);
-		bp = PREV_BLKP(bp);
+
+		/* Seems to work for now, but rather hackish */
+		/* the issue arises because bp is not actually in the list yet (I think) */
+		struct node *temp = (struct node *)bp;
+		if (temp->next != NULL)
+			splice(bp);
+		bp = PREV_BLKP((void *)bp);
 	} else {                                        /* Case 4 */
+		printf("Case 4\n");
 		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 		    GET_SIZE(FTRP(NEXT_BLKP(bp)));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -328,7 +353,7 @@ extend_heap(size_t words, struct node *next)
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
-
+	printf("Entering coalesce from extend_heap\n");
 	/* Coalesce if the previous block was free. */
 	return (coalesce(bp));
 }
@@ -349,11 +374,11 @@ find_fit(size_t asize)
 	
 	
 	/* Iterate through the list, find first fit */
-	while (cur != NULL) {
+	do {
 		if (asize <= GET_SIZE(HDRP(cur)))
 			return cur;
 		cur = cur->next;
-	}
+	} while (cur != list_start);
 	
 	/* Search for the first fit. 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
@@ -410,10 +435,19 @@ place(void *bp, size_t asize)
 static void
 splice(struct node *nodep)
 {
+	printf("Start splice\n");
+	if (nodep == NULL)
+		printf("Node pointer is NULL!\n");
+	if (nodep->previous == NULL)
+		printf("Node pointer's previous is NULL!\n");
+	if (nodep->next == NULL)
+		printf("Node pointer's next is NULL!\n");
+
 	nodep->previous->next = nodep->next;
 	nodep->next->previous = nodep->previous;
 	nodep->next = NULL;
 	nodep->previous = NULL;
+	printf("End splice\n");
 
 }
 
@@ -502,7 +536,6 @@ printblock(void *bp)
 /*
  * The last lines of this file configure the behavior of the "Tab" key in
  * emacs.  Emacs has a rudimentary understanding of C syntax and style.  In
- * particular, depressing the "Tab" key once at the start of a new line will
  * insert as many tabs and/or spaces as are needed for proper indentation.
  */
 
