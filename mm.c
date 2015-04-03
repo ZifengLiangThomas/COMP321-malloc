@@ -118,16 +118,16 @@ mm_init(void)
 	/* Can use heap_listp + 2*WSIZE to access head of list */
 	/*PUT(heap_listp + (2 * WSIZE), head.next);
 	PUT(heap_listp + (3 * WSIZE), head.previous);*/
-	head->previous = NULL:
+	head->previous = NULL;
 	head->next = NULL;
 	
-	list_start = &head;
+	list_start = head;
 	
 	PUT(heap_listp + (4 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
 
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE, head.next) == NULL)
+	if (extend_heap(CHUNKSIZE / WSIZE, head->next) == NULL)
 		return (-1);
 	return (0);
 }
@@ -168,7 +168,7 @@ mm_malloc(size_t size)
 
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = MAX(asize, CHUNKSIZE);
-	if ((bp = extend_heap(extendsize / WSIZE)) == NULL)  
+	if ((bp = extend_heap(extendsize / WSIZE, list_start)) == NULL)  
 		return (NULL);
 	place(bp, asize);
 	return (bp);
@@ -200,8 +200,8 @@ mm_free(void *bp)
 	/* Add to beginning of free list after coalescing */
 	new_node->next = list_head;
 	new_node->previous = NULL;
-	list_head->previous = new_node;
-	list_head = new_node;
+	list_start->previous = new_node;
+	list_start = new_node;
 }
 
 /*
@@ -319,7 +319,7 @@ extend_heap(size_t words, struct node *next)
 	/* The previous point points to the header of the previous block*/	
 	new_node = (struct node *)bp;
 	new_node->next = NULL;
-	new_node->previous = &next;
+	new_node->previous = next;
 	next = new_node;
 	/*PUT(bp, NULL);
 	PUT(bp + WSIZE, HDRP(next));*/
@@ -350,7 +350,7 @@ find_fit(size_t asize)
 	
 	/* Iterate through the list, find first fit */
 	while (cur != NULL) {
-		if (asize <= GET_SIZE(HDRP(cur))
+		if (asize <= GET_SIZE(HDRP(cur)))
 			return cur;
 		cur = cur->next;
 	}
@@ -396,21 +396,14 @@ place(void *bp, size_t asize)
 		new_nodep->next = nodep->next;
 				
 		/* Remove node from allocated block */
-		nodep->previous->next = nodep->next;
-		nodep->next-previous = nodep->previous;
-		nodep->next = NULL;
-		nodep->previous = NULL;
-		
+		splice(nodep);
 		
 	} else {
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
 		
 		/* Remove node from allocated block */
-		nodep->previous->next = nodep->next;
-		nodep->next-previous = nodep->previous;
-		nodep->next = NULL;
-		nodep->previous = NULL;
+		splice(nodep);
 	}
 }
 
@@ -418,7 +411,7 @@ static void
 splice(struct node *nodep)
 {
 	nodep->previous->next = nodep->next;
-	nodep->next-previous = nodep->previous;
+	nodep->next->previous = nodep->previous;
 	nodep->next = NULL;
 	nodep->previous = NULL;
 
