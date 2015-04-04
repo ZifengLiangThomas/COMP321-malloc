@@ -85,7 +85,8 @@ struct node {
 
 /* Global variables: */
 static char *heap_listp; /* Pointer to first block */
-static struct node *list_start;
+static int binNum = 12;
+char *list_start;
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
@@ -102,7 +103,7 @@ static void printblock(void *bp);
 static void placeListFront(int bin, void *bp);
 static void add_to_front(void *bp);
 static void splice(struct node *nodep);
-
+static int findBin(size_t asize);
 
 /* 
  * Requires:
@@ -115,19 +116,22 @@ static void splice(struct node *nodep);
 int
 mm_init(void) 
 {
-
 	/* Create the initial empty heap. */
 	
 	//struct node *head;
-	printf("INIT\n");	
+	printf("INIT\n");
+
 	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
 		return (-1);
+
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+
 	printf("Set prologue\n");
 	//head = (struct node *)heap_listp + 2 * WSIZE;
 	printf("Initialized head to be two words after the prologue start\n");
+	
 	/* Insert the next and previous pointers, the head of the list */
 	/* Can use heap_listp + 2*WSIZE to access head of list */
 	/*PUT(heap_listp + (2 * WSIZE), head.next);
@@ -136,14 +140,22 @@ mm_init(void)
 	head->next = head;	
 	list_start = head;
 */	
+	/* initialize each bin pointer to -1 */
+	for (int i = 0; i < binNum; i++) {
+		PUT(heap_listp + ((i + 2) * WSIZE), (uint64_t)(heap_listp + WSIZE));
+	}
+	list_start = heap_listp + ((binNum + 2) * WSIZE);
+
 	printf("Setting epilogue header\n");
-	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
+
+	PUT(list_start, PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
+	
 	checkheap(1);
 	
 	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE) == NULL) {
+	if (extend_heap((CHUNKSIZE + DSIZE) / WSIZE) == NULL) {
 		printf("Failed INIT\n");
 		return (-1);
 	}
@@ -504,29 +516,31 @@ splice(struct node *nodep)
  */
 int
 findBin(size_t asize)
-{
-	if (asize <= 64)
+{	
+	if (asize <= 32)
 		return 0;
-	else if (asize <= 128)
+	else if (asize <= 64)
 		return 1;
-	else if (asize <= 256)
+	else if (asize <= 128)
 		return 2;
-	else if (asize <= 512)
+	else if (asize <= 256)
 		return 3;
-	else if (asize <= 1024)
+	else if (asize <= 512)
 		return 4;
-	else if (asize <= 2048)
+	else if (asize <= 1024)
 		return 5;
-	else if (asize <= 4096)
+	else if (asize <= 2048)
 		return 6;
-	else if (asize <= 8192)
+	else if (asize <= 4096)
 		return 7;
-	else if (asize <= 16384)
+	else if (asize <= 8192)
 		return 8;
-	else if (asize <= 32768)
+	else if (asize <= 16384)
 		return 9;
-	else
+	else if (asize <= 32768)
 		return 10;
+	else
+		return 11;
 }
 
 /*
