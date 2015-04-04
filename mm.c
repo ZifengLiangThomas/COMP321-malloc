@@ -89,7 +89,7 @@ static struct node *list_start;
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
-static void *extend_heap(size_t words, struct node *next);
+static void *extend_heap(size_t words);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
@@ -98,9 +98,11 @@ static void checkblock(void *bp);
 static void checkheap(bool verbose);
 static void printblock(void *bp); 
 
-/* Our written helper functions */
+/* Function prototypes we added */
 static void placeListFront(int bin, void *bp);
+static void add_to_front(void *bp);
 static void splice(struct node *nodep);
+
 
 /* 
  * Requires:
@@ -116,30 +118,32 @@ mm_init(void)
 
 	/* Create the initial empty heap. */
 	
-	struct node *head;
+	//struct node *head;
 	printf("INIT\n");	
-	if ((heap_listp = mem_sbrk(5 * WSIZE)) == (void *)-1)
+	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
 		return (-1);
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
 	printf("Set prologue\n");
-	head = (struct node *)heap_listp + 2 * WSIZE;
+	//head = (struct node *)heap_listp + 2 * WSIZE;
 	printf("Initialized head to be two words after the prologue start\n");
 	/* Insert the next and previous pointers, the head of the list */
 	/* Can use heap_listp + 2*WSIZE to access head of list */
 	/*PUT(heap_listp + (2 * WSIZE), head.next);
 	PUT(heap_listp + (3 * WSIZE), head.previous);*/
-	head->previous = head;
+/*	head->previous = head;
 	head->next = head;	
 	list_start = head;
-	
-	PUT(heap_listp + (4 * WSIZE), PACK(0, 1));     /* Epilogue header */
-	printf("Set header epilogue\n");
+*/	
+	printf("Setting epilogue header\n");
+	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
+	checkheap(1);
+	
 	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE, head->next) == NULL) {
+	if (extend_heap(CHUNKSIZE / WSIZE) == NULL) {
 		printf("Failed INIT\n");
 		return (-1);
 	}
@@ -187,10 +191,11 @@ mm_malloc(size_t size)
 		place(bp, asize);
 		return (bp);
 	}
-
+	list_start->next = list_start;
+	list_start->previous = list_start;
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = MAX(asize, CHUNKSIZE);
-	if ((bp = extend_heap(extendsize / WSIZE, list_start)) == NULL)  
+	if ((bp = extend_heap(extendsize / WSIZE)) == NULL)  
 		return (NULL);
 
 	place(bp, asize);
@@ -210,7 +215,7 @@ void
 mm_free(void *bp)
 {
 	size_t size;
-	struct node *new_node;
+
 	
 	/* Ignore spurious requests. */
 	if (bp == NULL)
@@ -218,22 +223,14 @@ mm_free(void *bp)
 
 	/* Free and coalesce the block. */
 	size = GET_SIZE(HDRP(bp));
-	// PUT(HDRP(bp), PACK(size, 0));
-	// PUT(FTRP(bp), PACK(size, 0));
-	// new_node = (struct node *)coalesce(bp);
-	
-	/* Add to beginning of free list after coalescing */
-	// new_node->next = list_start;
-	// new_node->previous = NULL;
-	// list_start->previous = new_node;
-	// list_start = new_node;
-	// checkheap(1);
 
 	/* Reset Header and Footer to be free */
 	PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
 
 	coalesce(bp);
+
+	checkheap(1);
 }
 
 /*
@@ -301,7 +298,9 @@ coalesce(void *bp)
 	printf("Start coalesce\n");
 	if (bp == NULL)
 		printf("Pointer is NULL\n");
+	struct node *new_node;	
 	size_t size = GET_SIZE(HDRP(bp));
+	
 	printf("Got size\n");
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
 	printf("Stored whether previous block was allocated\n");
@@ -339,6 +338,12 @@ coalesce(void *bp)
 		splice((struct node *)NEXT_BLKP(bp));
 		bp = PREV_BLKP(bp);
 	}
+	
+	new_node = (struct node *)coalesce(bp);
+	new_node->next = list_start;
+	new_node->previous = NULL;
+	list_start->previous = new_node;
+	list_start = new_node;
 	checkheap(1);
 	return (bp);
 }
@@ -352,9 +357,8 @@ coalesce(void *bp)
  *   Extend the heap with a free block and return that block's address.
  */
 static void *
-extend_heap(size_t words, struct node *next) 
+extend_heap(size_t words) 
 {
-	struct node *new_node;
 	size_t size;
 	void *bp;
 
@@ -363,13 +367,11 @@ extend_heap(size_t words, struct node *next)
 
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
-	
+	printf("Before extended block is added to the free list\n");
+	checkheap(1);
 	/* Initialize the new node pointers, next precedes previous */
 	/* The previous point points to the header of the previous block*/	
-	new_node = (struct node *)bp;
-	new_node->next = NULL;
-	new_node->previous = next;
-	next = new_node;
+	
 	/*PUT(bp, NULL);
 	PUT(bp + WSIZE, HDRP(next));*/
 
@@ -377,9 +379,12 @@ extend_heap(size_t words, struct node *next)
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
+	printf("For isolation\n");
+	add_to_front(bp);
+	printf("After extended block is added to the free list\n");
+	checkheap(1);
 	printf("Entering coalesce from extend_heap\n");
 	/* Coalesce if the previous block was free. */
-	checkheap(1);
 	return (coalesce(bp));
 }
 
@@ -457,6 +462,18 @@ place(void *bp, size_t asize)
 		splice(nodep);
 	}
 	checkheap(1);
+}
+
+static void
+add_to_front(void *bp)
+{
+	struct node *nodep = (struct node *)bp;
+	nodep->next = list_start;
+	nodep->previous = list_start->previous;
+	list_start->previous->next = nodep;
+	list_start->previous = nodep;
+	list_start = nodep;
+
 }
 
 static void
@@ -581,9 +598,10 @@ checkheap(bool verbose)
 	if (verbose)
 		printf("Heap (%p):\n", heap_listp);
 
-	if (GET_SIZE(HDRP(heap_listp)) != DSIZE ||
-	    !GET_ALLOC(HDRP(heap_listp)))
-		printf("Bad prologue header\n");
+	if (GET_SIZE(HDRP(heap_listp)) != DSIZE)
+		printf("Bad prologue header: size\n");
+	if (!GET_ALLOC(HDRP(heap_listp)))
+		printf("Bad prologue header: alloc\n");
 	checkblock(heap_listp);
 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
@@ -594,8 +612,10 @@ checkheap(bool verbose)
 
 	if (verbose)
 		printblock(bp);
-	if (GET_SIZE(HDRP(bp)) != 0 || !GET_ALLOC(HDRP(bp)))
-		printf("Bad epilogue header\n");
+	if (GET_SIZE(HDRP(bp)) != 0)
+		printf("Bad epilogue header: size\n");
+	if (!GET_ALLOC(HDRP(bp)))
+		printf("Bad epilogue header: alloc\n");
 }
 
 /*
