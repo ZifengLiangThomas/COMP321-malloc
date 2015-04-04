@@ -79,7 +79,7 @@ static struct node *list_start;
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
-static void *extend_heap(size_t words, struct node *next);
+static void *extend_heap(size_t words);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
@@ -129,7 +129,7 @@ mm_init(void)
 	heap_listp += (WSIZE);
 	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE, head->next) == NULL) {
+	if (extend_heap(CHUNKSIZE / WSIZE) == NULL) {
 		printf("Failed INIT\n");
 		return (-1);
 	}
@@ -333,7 +333,7 @@ coalesce(void *bp)
  *   Extend the heap with a free block and return that block's address.
  */
 static void *
-extend_heap(size_t words, struct node *next) 
+extend_heap(size_t words) 
 {
 	struct node *new_node;
 	size_t size;
@@ -347,9 +347,9 @@ extend_heap(size_t words, struct node *next)
 	/* Initialize the new node pointers, next precedes previous */
 	/* The previous point points to the header of the previous block*/	
 	new_node = (struct node *)bp;
-	new_node->next = NULL;
-	new_node->previous = next;
-	next = new_node;
+	new_node->next = list_start;
+	new_node->previous = list_start->previous;
+	list_start->previous = new_node;
 	/*PUT(bp, NULL);
 	PUT(bp + WSIZE, HDRP(next));*/
 
