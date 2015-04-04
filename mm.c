@@ -66,6 +66,15 @@ team_t team = {
 #define NEXT_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) +  WSIZE))))
 #define PREV_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) + 2 * WSIZE))))
 
+/* Given block ptr bp, put a pointer into it to the next block in list. */
+#define SET_NEXT(bp, bp2) (PUT(bp, (uint64_t)bp2))
+
+/* Given block ptr bp, put pointer in adjacent block to the previous block */
+#define SET_PREV(bp, bp2) (PUT(bp + WSIZE, (uint64_t)bp2))
+
+/* Given bin number, compute distance from heap_listp to bin*/
+#define BIN_DIST(num) ((num + 1) * WSIZE)
+
 struct node {
 	struct node *next;
 	struct node *previous;
