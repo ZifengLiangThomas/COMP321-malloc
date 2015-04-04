@@ -106,6 +106,7 @@ static void insert_block(void *bp, int size);
 static void delete_block(void *bp);
 static int get_list_index(int size);
 
+bool ourVerbose = false;
 
 /*
  * Requires:
@@ -119,7 +120,8 @@ int
 mm_init(void) // xin thinks this is fine now
 {
 	int i;
-	printf("ENTER INIT\n");
+	if (ourVerbose)
+		printf("ENTER INIT\n");
 
 	/* Create the initial empty heap. */
 	if ((heap_listp = mem_sbrk((4 + BIN_NUM) * WSIZE)) == (void *)-1)
@@ -138,8 +140,10 @@ mm_init(void) // xin thinks this is fine now
 
 	heap_listp += ((BIN_NUM + 2) * WSIZE); // might need change
 
-	printf("INIT CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("INIT CHECKHEAP\n");
+		checkheap(1);
+	}
 
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
 	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -164,7 +168,8 @@ mm_malloc(size_t size) // xin also thinks this is fine now
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
 
-	printf("ENTER MALLOC\n");
+	if (ourVerbose)
+		printf("ENTER MALLOC\n");
 
 	/* Ignore spurious requests. */
 	if (size == 0)
@@ -197,8 +202,10 @@ mm_malloc(size_t size) // xin also thinks this is fine now
 
 	place(bp, asize);
 
-	printf("MALLOC CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("MALLOC CHECKHEAP\n");
+		checkheap(1);
+	}
 
 	return (bp);
 }
@@ -214,7 +221,8 @@ void
 mm_free(void *bp) // xin thinks this is perfect now
 {
 	size_t size;
-	printf("ENTER FREE\n");
+	if (ourVerbose)
+		printf("ENTER FREE\n");
 
 	/* Ignore spurious requests. */
 	if (bp == NULL)
@@ -230,8 +238,10 @@ mm_free(void *bp) // xin thinks this is perfect now
 
 	coalesce(bp);
 
-	printf("FREE CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("FREE CHECKHEAP\n");
+		checkheap(1);
+	}
 }
 
 /*
@@ -388,8 +398,11 @@ mm_realloc(void *ptr, size_t size)  // xin has a lot of code to write for this, 
 	/* Free the old block. */
 	mm_free(ptr);
 
-	printf("REALLOC CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("REALLOC CHECKHEAP\n");
+		checkheap(1);
+	}
+
 	return (newptr);
 }
 
@@ -412,15 +425,18 @@ coalesce(void *bp) // xin has an idea here but not really; update xin updated
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
 
-	printf("ENTER COALESCE\n");
+	if (ourVerbose)
+		printf("ENTER COALESCE\n");
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
-		printf("Case 1\n");  // do nothing
+		if (ourVerbose)
+			printf("Case 1\n");  // do nothing
 		// return (bp);  // xin changed, returns at end anyway
 	}
 
 	else if (prev_alloc && !next_alloc) {         /* Case 2 */
-		printf("Case 2\n");
+		if (ourVerbose)
+			printf("Case 2\n");
 
 		delete_block(bp);
 		delete_block(NEXT_BLKP(bp));
@@ -434,7 +450,8 @@ coalesce(void *bp) // xin has an idea here but not really; update xin updated
 	}
 
 	else if (!prev_alloc && next_alloc) {         /* Case 3 */
-		printf("Case 3\n");
+		if (ourVerbose)
+			printf("Case 3\n");
 
 		delete_block(bp);
 		delete_block(PREV_BLKP(bp));
@@ -450,7 +467,8 @@ coalesce(void *bp) // xin has an idea here but not really; update xin updated
 	}
 
 	else {                                        /* Case 4 */
-		printf("Case 4\n");
+		if (ourVerbose)
+			printf("Case 4\n");
 
 		delete_block(bp);
 		delete_block(NEXT_BLKP(bp));
@@ -465,8 +483,10 @@ coalesce(void *bp) // xin has an idea here but not really; update xin updated
 		insert_block(bp, size);
 	}
 
-	printf("COALESCE CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("COALESCE CHECKHEAP\n");
+		checkheap(1);
+	}
 
 	return (bp);
 }
@@ -484,7 +504,8 @@ extend_heap(size_t words) // xin thinks this is good now
 	size_t size;
 	void *bp;
 
-	printf("ENTER EXTEND HEAP\n");
+	if (ourVerbose)
+		printf("ENTER EXTEND HEAP\n");
 
 	size = words * WSIZE; // xin just do this for now; understand later
 
@@ -499,8 +520,10 @@ extend_heap(size_t words) // xin thinks this is good now
 
 	insert_block(bp, GET_SIZE(HDRP(bp))); // xin added
 
-	printf("EXTEND_HEAP CHECK HEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("EXTEND_HEAP CHECK HEAP\n");
+		checkheap(1);
+	}
 
 	/* Coalesce if the prev block was free. */
 	return (coalesce(bp));
@@ -561,7 +584,8 @@ find_fit(size_t asize) // xin changed all of this
 // 	printf("FIND_FIT CHECKHEAP\n");
 // 	checkheap(1);
 // 	return (NULL);
-
+	if (ourVerbose)
+		printf("FIT YO-SELF\n");
 
 	int i;
 	int list_idx = get_list_index(asize);
@@ -593,7 +617,8 @@ place(void *bp, size_t asize)
 {
 	size_t csize = GET_SIZE(HDRP(bp));
 
-	printf("ENTER PLACE\n");
+	if (ourVerbose)
+		printf("ENTER PLACE\n");
 
 	if ((csize - asize) >= (WSIZE + TSIZE)) { // xin changed this
 		delete_block(bp);
@@ -626,8 +651,10 @@ place(void *bp, size_t asize)
 		// remove_node(bp);
 	}
 
-	printf("PLACE CHECKHEAP\n");
-	checkheap(1);
+	if (ourVerbose) {
+		printf("PLACE CHECKHEAP\n");
+		checkheap(1);
+	}
 
 	return (bp);
 }
