@@ -23,9 +23,16 @@ We implemented a dynamic memory allocator using a segmented explicit free list.
 
 TESTING STRATEGY
 
+
 We wrote our checkheap function to check for X, Y, and Z in addition to the provided checks for the prologue and epilogue.
 
 In addition to the checks we added, we split the provided prologue and epilogue checks to check whether the size and allocated bit were correct separately, since our code produced an invalid epilogue header early on in development.
+
+<insert a detailed description of your testing strategy: at a minimum
+you should explain how you tested your code and why that testing was
+sufficient.>
+Testing strategy was pretty much all manual; no automatic checks.
+
 
 <insert a detailed description of your testing strategy: at a minimum
 you should explain how you tested your code and why that testing was
