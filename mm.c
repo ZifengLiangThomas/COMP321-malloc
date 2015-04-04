@@ -598,20 +598,22 @@ place(void *bp, size_t asize)
 	if ((csize - asize) >= (WSIZE + TSIZE)) { // xin changed this
 		delete_block(bp);
 
-		PUT(HDRP(bp), PACK(csize - asize, 0));
-		PUT(FTRP(bp), PACK(csize - asize, 0));
+		// PUT(HDRP(bp), PACK(csize - asize, 0));
+		// PUT(FTRP(bp), PACK(csize - asize, 0));
 
-		insert_block(bp, (int)(csize - asize));
+		// insert_block(bp, (int)(csize - asize));
 
-		bp = NEXT_BLKP(bp);
+		// bp = NEXT_BLKP(bp);
+
+		// PUT(HDRP(bp), PACK(asize, 1));
+		// PUT(FTRP(bp), PACK(asize, 1));
 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
-		// PUT(HDRP(bp), PACK(asize, 1));
-		// PUT(FTRP(bp), PACK(asize, 1));
-		// bp = NEXT_BLKP(bp);
-		// PUT(HDRP(bp), PACK(csize - asize, 0));
-		// PUT(FTRP(bp), PACK(csize - asize, 0));
+		bp = NEXT_BLKP(bp);
+		PUT(HDRP(bp), PACK(csize - asize, 0));
+		PUT(FTRP(bp), PACK(csize - asize, 0));
+		insert_block(bp, (int)(csize - asize));
 		// add_node(bp);
 	}
 
