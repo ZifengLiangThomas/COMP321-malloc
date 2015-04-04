@@ -40,11 +40,6 @@ team_t team = {
 	"lpm2@rice.edu"
 };
 
-struct node {
-	struct node *next;
-	struct node *prev;
-};
-
 /* Basic constants and macros: */
 #define ASIZE	   8		  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
@@ -62,7 +57,7 @@ struct node {
 #define PUT(p, val)  (*(uintptr_t *)(p) = (val))
 
 /* Read the size and allocated fields from address p. */
-#define GET_SIZE(p)   (GET(p) & ~(ASIZE - 1))
+#define GET_SIZE(p)   (GET(p) & ~(WSIZE - 1)) // xin changed
 #define GET_ALLOC(p)  (GET(p) & 0x1)
 
 /* Given block ptr bp, compute address of its header and footer. */
@@ -78,9 +73,15 @@ struct node {
 /* The smallest seglist range: 1 - 64 bytes*/
 #define BOUND   (128) // xin
 
+struct node {
+	struct node *next;
+	struct node *prev;
+	char stuff[];
+};
+
 /* Global variables: */
 static char *heap_listp; /* Pointer to first block */
-static struct node *list_start;
+// static struct node *list_start; // xin commented
 
 static void **bin_list; // xin
 
@@ -96,13 +97,13 @@ static void checkheap(bool verbose);
 static void printblock(void *bp);
 
 /* Function prototypes that we created */
-static void add_node(void *bp);
-static void remove_node(void *bp);
+// static void add_node(void *bp); // xin commented this out because warning
+// static void remove_node(void *bp);
 
 /* Xin added 3 similar to 2 functions above*/
+static void *find_block_list(struct node *bp, int asize);
 static void insert_block(void *bp, int size);
 static void delete_block(void *bp);
-static void *find_block_from_list(struct node *bp, int asize);
 static int get_list_index(int size);
 
 
@@ -117,18 +118,25 @@ static int get_list_index(int size);
 int
 mm_init(void) // xin thinks this is fine now
 {
+	int i;
 	printf("ENTER INIT\n");
 
 	/* Create the initial empty heap. */
-	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
+	if ((heap_listp = mem_sbrk((4 + BIN_NUM) * WSIZE)) == (void *)-1)
 		return (-1);
-	//PUT(heap_listp, 0);                            /* Alignment padding */ // This probably should be padded later on when we bin?
 
-	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */ // Xin changed here
-	PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
-	PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
+	bin_list = (void **)heap_listp;
 
-	heap_listp += (WSIZE); // might need change
+	for (i = 0; i < BIN_NUM; i++) {
+		bin_list[i] = NULL;
+	}
+
+	PUT(heap_listp + (BIN_NUM * WSIZE), 0); /* Alignment padding */ // This probably should be padded later on when we bin?
+	PUT(heap_listp + ((BIN_NUM + 1) * WSIZE), PACK(DSIZE, 1)); /* Prologue header */ // Xin changed here
+	PUT(heap_listp + ((BIN_NUM + 2) * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
+	PUT(heap_listp + ((BIN_NUM + 3) * WSIZE), PACK(0, 1));     /* Epilogue header */
+
+	heap_listp += ((BIN_NUM + 2) * WSIZE); // might need change
 
 	printf("INIT CHECKHEAP\n");
 	checkheap(1);
@@ -163,7 +171,7 @@ mm_malloc(size_t size) // xin also thinks this is fine now
 		return (NULL);
 
 	/* Adjust block size to include overhead and alignment reqs. */
-	if (size <= ASIZE)
+	if (size <= DSIZE) // xin changed to DSize instead of asize
 		asize = ASIZE + TSIZE; // basically 4 words
 	else
 		if (size % WSIZE == 0) // xin added this
@@ -240,22 +248,132 @@ mm_free(void *bp) // xin thinks this is perfect now
  *   block if the allocation was successful and NULL otherwise.
  */
 void *
-mm_realloc(void *ptr, size_t size)  // xin has a lot of code to write for this, he thinks
+mm_realloc(void *ptr, size_t size)  // xin has a lot of code to write for this, he thinks; update xin changed
 {
+	// size_t oldsize;
+	// void *newptr;
+
+	// printf("ENTER REALLOC\n");
+
+	// /* If size == 0 then this is just free, and we return NULL. */
+	// if (size == 0) {
+	// 	mm_free(ptr);
+	// 	return (NULL);
+	// }
+
+	// /* If oldptr is NULL, then this is just malloc. */
+	// if (ptr == NULL)
+	// 	return (mm_malloc(size));
+
+	// newptr = mm_malloc(size);
+
+	//  If realloc() fails the original block is left untouched
+	// if (newptr == NULL)
+	// 	return (NULL);
+
+	// /* Copy the old data. */
+	// oldsize = GET_SIZE(HDRP(ptr));
+	// if (size < oldsize)
+	// 	oldsize = size;
+	// memcpy(newptr, ptr, oldsize);
+
+	// /* Free the old block. */
+	// mm_free(ptr);
+
+	// printf("REALLOC CHECKHEAP\n");
+	// checkheap(1);
+	// return (newptr);
+
+
 	size_t oldsize;
 	void *newptr;
-
-	printf("ENTER REALLOC\n");
 
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
 		mm_free(ptr);
 		return (NULL);
 	}
-
 	/* If oldptr is NULL, then this is just malloc. */
 	if (ptr == NULL)
 		return (mm_malloc(size));
+
+	/* Align new size to multiples of WSIZE */
+	int new_size = (int)size;
+	if (new_size % WSIZE != 0)
+		new_size = ((new_size / WSIZE) + 1) * WSIZE;
+	int realloc_asize = new_size + (int)DSIZE;
+
+	/* Size of prev allocated block */
+	oldsize = GET_SIZE(HDRP(ptr));
+	int diffsize = (int)(oldsize - realloc_asize);
+
+
+	if (realloc_asize == (int)oldsize) {
+		return (ptr);
+	} // end if
+
+	/* New size less than previous allocated size */
+	else if (diffsize > 0) {
+		if (diffsize >= (int)(2 * DSIZE)) {
+
+			PUT(HDRP(ptr), PACK(realloc_asize, 1));
+			PUT(FTRP(ptr), PACK(realloc_asize, 1));
+
+			ptr = NEXT_BLKP(ptr);
+
+			PUT(HDRP(ptr), PACK(diffsize, 0));
+			PUT(FTRP(ptr), PACK(diffsize, 0));
+
+			insert_block(ptr, diffsize);
+
+			coalesce(ptr);
+
+			return (PREV_BLKP(ptr));
+		}
+		/* New size required less than previous allocated size but can't form a new block */
+		else {
+			return (ptr);
+		}
+	} // end else if 1
+
+	/* New size greater than previous allocated size */
+	else if (diffsize < 0) {
+		size_t nextsize = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+
+		/* Block next to current block free */
+		if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr)))) {
+
+			if ((int)nextsize >= (int)(abs(diffsize) + 2 * DSIZE)) {
+				delete_block(NEXT_BLKP(ptr));
+
+				PUT(HDRP(ptr), PACK(realloc_asize, 1));
+				PUT(FTRP(ptr), PACK(realloc_asize, 1));
+
+				ptr = NEXT_BLKP(ptr);
+
+				int newNextSize = (int)nextsize - abs(diffsize);
+
+				PUT(HDRP(ptr), PACK(newNextSize, 0));
+				PUT(FTRP(ptr), PACK(newNextSize, 0));
+
+				insert_block(ptr, newNextSize);
+
+				coalesce(ptr);
+
+				return (PREV_BLKP(ptr));
+			}
+			/* Next free block doesn't have enough space */
+			else if ((int)nextsize >= abs(diffsize)) {
+
+				delete_block(NEXT_BLKP(ptr));
+
+				PUT(HDRP(ptr), PACK((int)(oldsize + nextsize), 1));
+				PUT(FTRP(ptr), PACK((int)(oldsize + nextsize), 1));
+
+				return (ptr);
+			}
+		}
+	} // end else if 2
 
 	newptr = mm_malloc(size);
 
@@ -263,8 +381,6 @@ mm_realloc(void *ptr, size_t size)  // xin has a lot of code to write for this, 
 	if (newptr == NULL)
 		return (NULL);
 
-	/* Copy the old data. */
-	oldsize = GET_SIZE(HDRP(ptr));
 	if (size < oldsize)
 		oldsize = size;
 	memcpy(newptr, ptr, oldsize);
@@ -290,42 +406,68 @@ mm_realloc(void *ptr, size_t size)  // xin has a lot of code to write for this, 
  *   block.
  */
 static void *
-coalesce(void *bp) // xin has an idea here but not really
+coalesce(void *bp) // xin has an idea here but not really; update xin updated
 {
 	size_t size = GET_SIZE(HDRP(bp));
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+
 	printf("ENTER COALESCE\n");
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
-		printf("Case 1\n");
-		return (bp);
-	} else if (prev_alloc && !next_alloc) {         /* Case 2 */
+		printf("Case 1\n");  // do nothing
+		// return (bp);  // xin changed, returns at end anyway
+	}
+
+	else if (prev_alloc && !next_alloc) {         /* Case 2 */
 		printf("Case 2\n");
+
+		delete_block(bp);
+		delete_block(NEXT_BLKP(bp));
+
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
-		remove_node(NEXT_BLKP(bp));
-	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
+
+		insert_block(bp, size);
+	}
+
+	else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		printf("Case 3\n");
+
+		delete_block(bp);
+		delete_block(PREV_BLKP(bp));
+
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+
 		PUT(FTRP(bp), PACK(size, 0));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-		remove_node(bp);
+
 		bp = PREV_BLKP(bp);
-	} else {                                        /* Case 4 */
+		insert_block(bp, size);
+
+	}
+
+	else {                                        /* Case 4 */
 		printf("Case 4\n");
-		size += GET_SIZE(HDRP(PREV_BLKP(bp))) +
-		    GET_SIZE(FTRP(NEXT_BLKP(bp)));
+
+		delete_block(bp);
+		delete_block(NEXT_BLKP(bp));
+		delete_block(PREV_BLKP(bp));
+
+		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-		remove_node(bp);
-		remove_node(NEXT_BLKP(bp));
+
 		bp = PREV_BLKP(bp);
+		insert_block(bp, size);
 	}
-	add_node(bp);
+
 	printf("COALESCE CHECKHEAP\n");
 	checkheap(1);
+
 	return (bp);
 }
 
@@ -344,8 +486,6 @@ extend_heap(size_t words) // xin thinks this is good now
 
 	printf("ENTER EXTEND HEAP\n");
 
-	/* Allocate an even number of words to maintain alignment. */
-	// size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE; // xin can't understand this; it's too late
 	size = words * WSIZE; // xin just do this for now; understand later
 
 	if ((bp = mem_sbrk(size)) == (void *)-1)
@@ -432,7 +572,7 @@ find_fit(size_t asize) // xin changed all of this
 
 		bp = bin_list[i];
 
-		if ((bp = find_block_from_list(bp, asize)) != NULL)
+		if ((bp = find_block_list(bp, asize)) != NULL)
 			return bp;
 	}
 
@@ -455,7 +595,7 @@ place(void *bp, size_t asize)
 
 	printf("ENTER PLACE\n");
 
-	if ((csize - asize) >= (ASIZE + TSIZE)) { // xin changed this
+	if ((csize - asize) >= (WSIZE + TSIZE)) { // xin changed this
 		delete_block(bp);
 
 		PUT(HDRP(bp), PACK(csize - asize, 0));
@@ -490,6 +630,7 @@ place(void *bp, size_t asize)
 	return (bp);
 }
 
+/* Xin commented out these 2 functions
 
 static void
 add_node(void *bp)
@@ -552,6 +693,8 @@ remove_node(void *bp)
 	return;
 }
 
+*/
+
 // Start of Xin functions
 
 
@@ -564,11 +707,11 @@ remove_node(void *bp)
  * 	Find block size in bins where block size is >= to asize
  */
 static void *
-find_block_from_list(struct node *bp, int asize)
+find_block_list(struct node *bp, int asize)
 {
 
 	assert(asize > 0);
-	assert(bp != NULL); // xin thinks this could causes problems
+	//assert(bp != NULL); // xin thinks this could causes problems
 
 	size_t block_size;
 
