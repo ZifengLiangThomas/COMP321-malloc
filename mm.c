@@ -143,17 +143,16 @@ mm_init(void)
 
 	/*head->previous = head;
 	head->next = head;	
-	list_start = head;*/
-	
+	list_start = head;
+	head->previous = head;
+	head->next = head;	
+	list_start = head;
+*/	
 	
 	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
 	printf("Epilogue set\n");
 
-/*	head->previous = head;
-	head->next = head;	
-	list_start = head;
-*/	
 	/* initialize each bin pointer to -1 */
 	/*for (int i = 0; i < binNum; i++) {
 		PUT(heap_listp + ((i + 2) * WSIZE), (uint64_t)(heap_listp + WSIZE));
@@ -161,11 +160,10 @@ mm_init(void)
 	list_start = heap_listp + ((binNum + 2) * WSIZE); */
 
 	checkheap(1);
-
 	
 	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap((CHUNKSIZE + DSIZE) / WSIZE) == NULL) {
+	if (extend_heap(CHUNKSIZE / WSIZE) == NULL) {
 		printf("Failed INIT\n");
 		return (-1);
 	}
