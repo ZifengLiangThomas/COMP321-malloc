@@ -28,5 +28,5 @@ TESTING STRATEGY
 <insert a detailed description of your testing strategy: at a minimum
 you should explain how you tested your code and why that testing was
 sufficient.>
-
+Testing strategy was pretty much all manual; no automatic checks.
 
