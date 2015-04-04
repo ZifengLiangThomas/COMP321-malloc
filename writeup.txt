@@ -1,12 +1,22 @@
-<insert name(s)>
+Xin Huang <xyh1@rice.edu>
+Leo Meister <lpm2@rice.edu>
 COMP 321 Project 5: Malloc Dynamic Memory Allocator
-<insert date turned in>
+4/4/15
 
 DESCRIPTION
 
 <insert a brief description of your solution (i.e., a short synopsis
 of what the application does from the persepective of someone who
 would use it).>
+
+Our mm.c program essentially performs 3 operations, memory allocation, memory
+freeing, and reallocation. 'mm_malloc' takes size of data as an input and
+returns a pointer in memory where that size of data can be stored until
+explicitly freed from memory. 'mm_free' takes as an input, a pointer in memory and frees
+the block for later re-use. 'mm_realloc' takes as an input a pointer
+that had already been memory allocated and new size and returns a new pointer
+to the memory location that is able to store the new size. It then moves the
+data from the previous input memory block in the new memory block.
 
 DESIGN
 
