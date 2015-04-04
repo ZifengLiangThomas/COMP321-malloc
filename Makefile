@@ -16,5 +16,3 @@ clock.o: clock.c clock.h
 
 clean:
 	rm -f *~ *.o mdriver
-
-
