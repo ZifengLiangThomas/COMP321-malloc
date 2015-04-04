@@ -42,7 +42,7 @@ team_t team = {
 
 struct node {
 	struct node *next;
-	struct node *previous;
+	struct node *prev;
 };
 
 /* Basic constants and macros: */
@@ -434,7 +434,7 @@ find_fit(size_t asize) // xin changed all of this
 			return bp;
 	}
 
-	return (NULL); // couldn't find a valid block
+	// return (NULL); // couldn't find a valid block
 }
 
 /*
@@ -486,7 +486,7 @@ place(void *bp, size_t asize)
 	printf("PLACE CHECKHEAP\n");
 	checkheap(1);
 
-	return (bp);
+	// return (bp);
 }
 
 
@@ -567,9 +567,7 @@ find_block_from_list(struct node *bp, int asize)
 {
 
 	assert(asize > 0);
-
-	if (bp == NULL)
-		return NULL;
+	assert(bp != NULL); // xin thinks this could causes problems
 
 	size_t block_size;
 
@@ -579,8 +577,6 @@ find_block_from_list(struct node *bp, int asize)
 			return bp;
 		bp = bp->next;
 	}
-
-	return NULL;
 }
 
 /*
