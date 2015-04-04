@@ -132,6 +132,7 @@ mm_init(void)
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
 
 	printf("Prologue set\n");
+
 	//temp = heap_listp + (2 * WSIZE);
 	//head = (struct node *)temp;
 	//printf("Initialized head to be two words after the prologue start\n");
@@ -143,11 +144,7 @@ mm_init(void)
 
 	/*head->previous = head;
 	head->next = head;	
-	list_start = head;
-	head->previous = head;
-	head->next = head;	
-	list_start = head;
-*/	
+	list_start = head;*/	
 	
 	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
