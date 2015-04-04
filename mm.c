@@ -45,7 +45,7 @@ team_t team = {
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define TSIZE	   (3 * WSIZE)	  /* Tripleword size (bytes) */
-#define CHUNKSIZE  (1 << 12)      /* Extend heap by this amount (bytes) */
+#define CHUNKSIZE  (1 << 14)      /* Extend heap by this amount (bytes) */
 
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))
 
@@ -506,8 +506,8 @@ extend_heap(size_t words) // xin thinks this is good now
 
 	if (ourVerbose)
 		printf("ENTER EXTEND HEAP\n");
-
-	size = words * WSIZE; // xin just do this for now; understand later
+	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+	//size = words * WSIZE; // xin just do this for now; understand later
 
 	if ((bp = mem_sbrk(size)) == (void *)-1)
 		return (NULL);
@@ -932,6 +932,15 @@ checkheap(bool verbose)
 		printf("Bad epilogue header: alloc\n");
 
 	printf("End of checkheap\n");
+	
+	/* Invariance Checks:all blocks in free list actually free
+	 * 		     all free blocks in free list
+	 *		     free blocks escaping coalescing
+	 *		free list pointers point to valid free blocks
+	 *		do any allocated blocks overlap
+	 *		do pointers in heap block point to valid heap addr
+	 *		...
+	 */
 }
 
 /*
