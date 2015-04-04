@@ -69,7 +69,7 @@ struct node {
 #define HDRP(bp)  ((char *)(bp) - WSIZE)
 #define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
-/* Given block ptr bp, compute address of next and previous blocks. */
+/* Given block ptr bp, compute address of next and prev blocks. */
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
@@ -82,13 +82,13 @@ struct node {
 static char *heap_listp; /* Pointer to first block */
 static struct node *list_start;
 
-static void **seg_list; // xin
+static void **bin_list; // xin
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
 static void *extend_heap(size_t words);
 static void *find_fit(size_t asize);
-static void place(void *bp, size_t asize);
+static void *place(void *bp, size_t asize);
 
 /* Function prototypes for heap consistency checker routines: */
 static void checkblock(void *bp);
@@ -102,7 +102,7 @@ static void remove_node(void *bp);
 /* Xin added 3 similar to 2 functions above*/
 static void insert_block(void *bp, int size);
 static void delete_block(void *bp);
-static void find_block_from_list(struct node *bp, int asize);
+static void *find_block_from_list(struct node *bp, int asize);
 static int get_list_index(int size);
 
 
@@ -345,7 +345,8 @@ extend_heap(size_t words) // xin thinks this is good now
 	printf("ENTER EXTEND HEAP\n");
 
 	/* Allocate an even number of words to maintain alignment. */
-	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+	// size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE; // xin can't understand this; it's too late
+	size = words * WSIZE; // xin just do this for now; understand later
 
 	if ((bp = mem_sbrk(size)) == (void *)-1)
 		return (NULL);
@@ -358,9 +359,10 @@ extend_heap(size_t words) // xin thinks this is good now
 
 	insert_block(bp, GET_SIZE(HDRP(bp))); // xin added
 
-	printf("EXTEND_HEAP CHECKHEAP\n");
+	printf("EXTEND_HEAP CHECK HEAP\n");
 	checkheap(1);
-	/* Coalesce if the previous block was free. */
+
+	/* Coalesce if the prev block was free. */
 	return (coalesce(bp));
 }
 
@@ -428,13 +430,13 @@ find_fit(size_t asize) // xin changed all of this
 	/* Search for the first fit from the lists with index lst_idx or bigger */
 	for (i = list_idx; i < BIN_NUM; i ++) {
 
-		bp = seg_list[i];
+		bp = bin_list[i];
 
 		if ((bp = find_block_from_list(bp, asize)) != NULL)
 			return bp;
 	}
 
-	// return (NULL); // couldn't find a valid block
+	return (NULL); // couldn't find a valid block
 }
 
 /*
@@ -446,7 +448,7 @@ find_fit(size_t asize) // xin changed all of this
  *   split that block if the remainder would be at least the minimum block
  *   size.
  */
-static void
+static void *
 place(void *bp, size_t asize)
 {
 	size_t csize = GET_SIZE(HDRP(bp));
@@ -475,7 +477,6 @@ place(void *bp, size_t asize)
 
 	else {
 		delete_block(bp);
-
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
 		// PUT(HDRP(bp), PACK(csize, 1));
@@ -486,7 +487,7 @@ place(void *bp, size_t asize)
 	printf("PLACE CHECKHEAP\n");
 	checkheap(1);
 
-	// return (bp);
+	return (bp);
 }
 
 
@@ -498,22 +499,22 @@ add_node(void *bp)
 	printf("ENTER ADD\n");
 	if (nodep == NULL)
 		printf("Node pointer is NULL!\n");
-	if (list_start == NULL || (list_start->next == NULL && list_start->previous == NULL)) {
+	if (list_start == NULL || (list_start->next == NULL && list_start->prev == NULL)) {
 		list_start = nodep;
 		nodep->next = nodep;
-		nodep->previous = nodep;
+		nodep->prev = nodep;
 	} else {
 		printf("Adding to list\n");
 		nodep->next = list_start;
-		nodep->previous = list_start->previous;
+		nodep->prev = list_start->prev;
 		printf("Iso 1\n");
-		if(list_start->previous == NULL)
-			printf("List start previous is null\n");
+		if(list_start->prev == NULL)
+			printf("List start prev is null\n");
 		if(list_start->next == NULL)
 			printf("List start next is null\n");
-		list_start->previous->next = nodep;
+		list_start->prev->next = nodep;
 		printf("Iso 2\n");
-		list_start->previous = nodep;
+		list_start->prev = nodep;
 		printf("Iso 3\n");
 		list_start = nodep;
 	}
@@ -537,13 +538,13 @@ remove_node(void *bp)
 		printf("Node pointer is NULL!\n");
 	if (nodep->next == NULL)
 		printf("Node pointer's next is NULL!\n");
-	if (nodep->previous == NULL)
-		printf("Node pointer's previous is NULL!\n");
+	if (nodep->prev == NULL)
+		printf("Node pointer's prev is NULL!\n");
 
-	nodep->previous->next = nodep->next;
-	nodep->next->previous = nodep->previous;
+	nodep->prev->next = nodep->next;
+	nodep->next->prev = nodep->prev;
 	nodep->next = NULL;
-	nodep->previous = NULL;
+	nodep->prev = NULL;
 
 	printf("REMOVE CHECKHEAP\n");
 	checkheap(1);
@@ -562,7 +563,7 @@ remove_node(void *bp)
  * Effects:
  * 	Find block size in bins where block size is >= to asize
  */
-static void
+static void *
 find_block_from_list(struct node *bp, int asize)
 {
 
@@ -577,6 +578,8 @@ find_block_from_list(struct node *bp, int asize)
 			return bp;
 		bp = bp->next;
 	}
+
+	return NULL;
 }
 
 /*
@@ -626,21 +629,21 @@ insert_block(void *bp, int size)
 	list_idx = get_list_index(size);
 
 	/* LIFO insert block to seglist  */
-	start_block = seg_list[list_idx];
+	start_block = bin_list[list_idx];
 
 	new_block = bp;
 	/* seglist been insert into is empty */
 	if (start_block == NULL) {
 		new_block->prev = NULL;
 		new_block->next = NULL;
-		seg_list[list_idx] = new_block;
+		bin_list[list_idx] = new_block;
 	}
 	/* seglist been insert into is not empty */
 	else {
 		new_block->prev = NULL;
 		new_block->next = start_block;
 		start_block->prev = new_block;
-		seg_list[list_idx] = new_block;
+		bin_list[list_idx] = new_block;
 	}
 
 }
@@ -678,12 +681,12 @@ delete_block(void *bp)
 	if (bigger == NULL) {
 		/* No block after Delete Block */
 		if (smaller == NULL) {
-			seg_list[list_idx] = NULL; // no left/right
+			bin_list[list_idx] = NULL; // no left/right
 		}
 		/* Block after Delete Block */
 		else {
 			smaller->prev = NULL;
-			seg_list[list_idx] = smaller;
+			bin_list[list_idx] = smaller;
 		}
 
 	/* Block preceding Delete Block */
