@@ -38,11 +38,16 @@ team_t team = {
 	"lpm2@rice.edu"
 };
 
+struct node {
+	struct node *next;
+	struct node *previous;
+};
+
 /* Basic constants and macros: */
-#define ASIZE	   8		  	  /* Number of bytes to align to */
+#define ASIZE	   8		  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
-#define QSIZE	   (4 * WSIZE)	  /* Quadword size (bytes) */
+#define TSIZE	   (3 * WSIZE)	  /* Tripleword size (bytes) */
 #define CHUNKSIZE  (1 << 12)      /* Extend heap by this amount (bytes) */
 
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))  
@@ -63,30 +68,11 @@ team_t team = {
 #define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
 /* Given block ptr bp, compute address of next and previous blocks. */
-#define NEXT_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) +  WSIZE))))
-#define PREV_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) + 2 * WSIZE))))
-
-#define NEXT_PHYS_BLKP(bp) ((char *)(FTRP(bp) + 2 * WSIZE))
-#define PREV_PHYS_BLKP(bp) ((char *)(bp - (GET_SIZE(bp - 2 * WSIZE))))
-
-/* Given block ptr bp, put a pointer into it to the next block in list. */
-#define SET_NEXT(bp, bp2) (PUT(bp, (uint64_t)bp2))
-
-/* Given block ptr bp, put pointer in adjacent block to the previous block */
-#define SET_PREV(bp, bp2) (PUT(bp + WSIZE, (uint64_t)bp2))
-
-/* Given bin number, compute distance from heap_listp to bin*/
-#define BIN_DIST(num) ((num + 1) * WSIZE)
-
-struct node {
-	struct node *next;
-	struct node *previous;
-};
+#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
+#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
 /* Global variables: */
-static char *heap_listp; /* Pointer to first block */
-//static int binNum = 12;
-//char *list_start;
+static char *heap_listp; /* Pointer to first block */  
 static struct node *list_start;
 
 /* Function prototypes for internal helper routines: */
@@ -100,13 +86,9 @@ static void checkblock(void *bp);
 static void checkheap(bool verbose);
 static void printblock(void *bp); 
 
-
-/* Function prototypes we added */
-//static void placeListFront(int bin, void *bp);
-static void add_to_front(void *bp);
-static void splice(struct node *nodep);
-//static int findBin(size_t asize);
-
+/* Function prototypes that we created */
+static void add_node(void *bp);
+static void remove_node(void *bp);
 
 /* 
  * Requires:
@@ -119,63 +101,23 @@ static void splice(struct node *nodep);
 int
 mm_init(void) 
 {
+	printf("ENTER INIT\n");
 	/* Create the initial empty heap. */
-	
-	//struct node *head;
-	printf("INIT\n");
-
 	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
 		return (-1);
-
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
-
-	printf("Prologue set\n");
-	//temp = heap_listp + (2 * WSIZE);
-	//head = (struct node *)temp;
-	//printf("Initialized head to be two words after the prologue start\n");
-
-	/* Insert the next and previous pointers, the head of the list */
-	/* Can use heap_listp + 2*WSIZE to access head of list */
-	/*PUT(heap_listp + (2 * WSIZE), head.next);
-	PUT(heap_listp + (3 * WSIZE), head.previous);*/
-
-	/*head->previous = head;
-	head->next = head;	
-	list_start = head;*/
-	
-	
 	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
-	printf("Epilogue set\n");
 
-/*	head->previous = head;
-	head->next = head;	
-	list_start = head;
-*/	
-	/* initialize each bin pointer to -1 */
-	/*for (int i = 0; i < binNum; i++) {
-		PUT(heap_listp + ((i + 2) * WSIZE), (uint64_t)(heap_listp + WSIZE));
-	}
-	list_start = heap_listp + ((binNum + 2) * WSIZE); */
-
+	printf("INIT CHECKHEAP\n");	
 	checkheap(1);
 
-	
-	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap((CHUNKSIZE + DSIZE) / WSIZE) == NULL) {
-		printf("Failed INIT\n");
+	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
 		return (-1);
-	}
 	
-	printf("Completed init!\n");
-	if (list_start == NULL)
-		printf("List start is NULL!\n");	
-	
-	checkheap(1);
-
 	return (0);
 }
 
@@ -195,18 +137,17 @@ mm_malloc(size_t size)
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
 
-	printf("Start malloc\n");
+	printf("ENTER MALLOC\n");
+
 	/* Ignore spurious requests. */
 	if (size == 0)
 		return (NULL);
 
 	/* Adjust block size to include overhead and alignment reqs. */
-	/* Increased size to 4 words of overhead from 2 */
-	/* Smallest useable block size is now 2 words instead of 1 */
 	if (size <= ASIZE)
-		asize = ASIZE + QSIZE;
+		asize = ASIZE + TSIZE;
 	else
-		asize = ASIZE * ((size + QSIZE + (ASIZE - 1)) / ASIZE);
+		asize = ASIZE * ((size + TSIZE + (ASIZE - 1)) / ASIZE);
 
 	/* Search the free list for a fit. */
 	if ((bp = find_fit(asize)) != NULL) {
@@ -218,10 +159,9 @@ mm_malloc(size_t size)
 	extendsize = MAX(asize, CHUNKSIZE);
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL)  
 		return (NULL);
-
 	place(bp, asize);
+	printf("MALLOC CHECKHEAP\n");
 	checkheap(1);
-
 	return (bp);
 } 
 
@@ -236,20 +176,18 @@ void
 mm_free(void *bp)
 {
 	size_t size;
-
-	
+	printf("ENTER FREE\n");
 	/* Ignore spurious requests. */
 	if (bp == NULL)
 		return;
 
 	/* Free and coalesce the block. */
 	size = GET_SIZE(HDRP(bp));
-
-	/* Reset Header and Footer to be free */
 	PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
 	coalesce(bp);
-
+	
+	printf("FREE CHECKHEAP\n");
 	checkheap(1);
 }
 
@@ -271,7 +209,9 @@ mm_realloc(void *ptr, size_t size)
 {
 	size_t oldsize;
 	void *newptr;
-
+	
+	printf("ENTER REALLOC\n");
+	
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
 		mm_free(ptr);
@@ -296,6 +236,8 @@ mm_realloc(void *ptr, size_t size)
 
 	/* Free the old block. */
 	mm_free(ptr);
+
+	printf("REALLOC CHECKHEAP\n");
 	checkheap(1);
 	return (newptr);
 }
@@ -315,18 +257,11 @@ mm_realloc(void *ptr, size_t size)
 static void *
 coalesce(void *bp) 
 {
-	printf("Start coalesce\n");
-	if (bp == NULL)
-		printf("Pointer is NULL\n");
-	struct node *new_node;	
 	size_t size = GET_SIZE(HDRP(bp));
-	
-	printf("Got size\n");
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-	printf("Stored whether previous block was allocated\n");
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-	printf("Stored whether the next block was allocated\n");
-	printf("Finished coalesce initializations\n");
+	printf("ENTER COALESCE\n");
+
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
 		printf("Case 1\n");
 		return (bp);
@@ -335,44 +270,34 @@ coalesce(void *bp)
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
-		splice((struct node *)NEXT_BLKP(bp));
+		remove_node(NEXT_BLKP(bp));
 	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		printf("Case 3\n");
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 		PUT(FTRP(bp), PACK(size, 0));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-
-		/* Seems to work for now, but rather hackish */
-		/* the issue arises because bp is not actually in the list yet (I think) */
-		struct node *temp = (struct node *)bp;
-		if (temp->next != NULL)
-			splice(bp);
-		bp = PREV_BLKP((void *)bp);
+		remove_node(bp);
+		bp = PREV_BLKP(bp);
 	} else {                                        /* Case 4 */
 		printf("Case 4\n");
 		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 		    GET_SIZE(FTRP(NEXT_BLKP(bp)));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-		splice((struct node *)bp);
-		splice((struct node *)NEXT_BLKP(bp));
+		remove_node(bp);
+		remove_node(NEXT_BLKP(bp));
 		bp = PREV_BLKP(bp);
 	}
-	
-	new_node = (struct node *)coalesce(bp);
-	new_node->next = list_start;
-	new_node->previous = NULL;
-	list_start->previous = new_node;
-	list_start = new_node;
+	add_node(bp);
+	printf("COALESCE CHECKHEAP\n");
 	checkheap(1);
 	return (bp);
 }
 
 /* 
  * Requires:
- *   words: the number of words to increase the heap by
- *   next: next pointer at the end of the linked list, to be set to the 
- 	   header of the new block
+ *   None.
+ *
  * Effects:
  *   Extend the heap with a free block and return that block's address.
  */
@@ -381,40 +306,22 @@ extend_heap(size_t words)
 {
 	size_t size;
 	void *bp;
-
+	
+	printf("ENTER EXTEND HEAP\n");
+	
 	/* Allocate an even number of words to maintain alignment. */
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
-
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
-	printf("Before extended block is added to the free list\n");
-	checkheap(1);
-	/* Initialize the new node pointers, next precedes previous */
-	/* The previous point points to the header of the previous block*/	
-	
-	/*PUT(bp, NULL);
-	PUT(bp + WSIZE, HDRP(next));*/
 
 	/* Initialize free block header/footer and the epilogue header. */
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
+	add_node(bp);
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 	
-	/* If list start is NULL, initialize the start to the pointer to the
-	 * added block
-	 */
-	if (list_start == NULL) {
-		list_start = (struct node *)bp;
-		list_start->next = list_start;
-		list_start->previous = list_start;
-	}
-
-	printf("For isolation\n");
-
-	add_to_front(bp);
-	printf("After extended block is added to the free list\n");
+	printf("EXTEND_HEAP CHECKHEAP\n");
 	checkheap(1);
-	printf("Entering coalesce from extend_heap\n");
 	/* Coalesce if the previous block was free. */
 	return (coalesce(bp));
 }
@@ -432,22 +339,23 @@ find_fit(size_t asize)
 {
 	//void *bp;
 	struct node *cur = list_start;
-	
-	
-	/* Iterate through the list, find first fit */
+	printf("ENTER FIND FIT\n");
+
 	do {
-		if (asize <= GET_SIZE(HDRP(cur)))
-			return cur;
+		if (!GET_ALLOC(HDRP(cur)) && asize <= GET_SIZE(HDRP(cur)))
+			return (cur);
 		cur = cur->next;
 	} while (cur != list_start);
 	
-	/* Search for the first fit. 
-	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+	
+	/* Search for the first fit. */
+	/*for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
 		if (!GET_ALLOC(HDRP(bp)) && asize <= GET_SIZE(HDRP(bp)))
 			return (bp);
-	} */
-
+	}*/
 	/* No fit was found. */
+	printf("FIND_FIT CHECKHEAP\n");
+	checkheap(1);
 	return (NULL);
 }
 
@@ -463,139 +371,87 @@ find_fit(size_t asize)
 static void
 place(void *bp, size_t asize)
 {
-	size_t csize = GET_SIZE(HDRP(bp));
-	struct node *nodep = (struct node *) bp;
-	struct node *new_nodep;
+	size_t csize = GET_SIZE(HDRP(bp));   
 
-	/* increased size to account for next and previous pointer overhead */
-	if ((csize - asize) >= (ASIZE + QSIZE)) { 
+	printf("ENTER PLACE\n");
+
+	if ((csize - asize) >= (ASIZE + TSIZE)) { 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
-		
+		remove_node(bp);
 		bp = NEXT_BLKP(bp);
 		PUT(HDRP(bp), PACK(csize - asize, 0));
 		PUT(FTRP(bp), PACK(csize - asize, 0));
-		
-		/* Set new node for the leftover free block */
-		new_nodep = (struct node *)bp;
-		
-		new_nodep->previous = nodep->previous;
-		new_nodep->next = nodep->next;
-				
-		/* Remove node from allocated block */
-		splice(nodep);
-		
+		add_node(bp);
 	} else {
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
-		
-		/* Remove node from allocated block */
-		splice(nodep);
+		remove_node(bp);
 	}
+	
+	printf("PLACE CHECKHEAP\n");
 	checkheap(1);
 }
 
+
 static void
-add_to_front(void *bp)
+add_node(void *bp)
 {
 	struct node *nodep = (struct node *)bp;
-	nodep->next = list_start;
-	nodep->previous = list_start->previous;
-	list_start->previous->next = nodep;
-	list_start->previous = nodep;
-	list_start = nodep;
-
-}
-
-static void
-splice(struct node *nodep)
-{
-	printf("Start splice\n");
+	
+	printf("ENTER ADD\n");
 	if (nodep == NULL)
 		printf("Node pointer is NULL!\n");
-	if (nodep->previous == NULL)
-		printf("Node pointer's previous is NULL!\n");
+	if (nodep->next == NULL && nodep->previous == NULL) {
+		printf("List was empty\n");
+		nodep->next = nodep;
+		nodep->previous = nodep;
+	} else {
+		printf("Adding to list\n");
+		nodep->next = list_start;
+		nodep->previous = list_start->previous;
+		printf("Iso 1\n");
+		if(list_start->previous == NULL)
+			printf("List start previous is null\n");
+		list_start->previous->next = nodep;
+		printf("Iso 2\n");
+		list_start->previous = nodep;
+		printf("Iso 3\n");
+	}
+	
+	list_start = nodep;
+	
+	printf("ADD CHECKHEAP\n");
+	checkheap(1);
+	
+	return;
+}
+
+
+static void
+remove_node(void *bp)
+{
+	struct node *nodep = (struct node *)bp;
+	
+	printf("ENTER REMOVE\n");
+	
+	if (nodep == NULL)
+		printf("Node pointer is NULL!\n");
 	if (nodep->next == NULL)
 		printf("Node pointer's next is NULL!\n");
-
+	if (nodep->previous == NULL)
+		printf("Node pointer's previous is NULL!\n");
+		
 	nodep->previous->next = nodep->next;
 	nodep->next->previous = nodep->previous;
 	nodep->next = NULL;
 	nodep->previous = NULL;
-	printf("End splice\n");
-
+	
+	printf("REMOVE CHECKHEAP\n");
+	checkheap(1);
+	
+	return;
 }
-
-/*
- * Requires:
- *   asize
- *
- * Effects:
- *   Returns bin where size is less than or equal to bin max
- */
-// int
-// findBin(size_t asize)
-// {	
-// 	if (asize <= 32)
-// 		return 0;
-// 	else if (asize <= 64)
-// 		return 1;
-// 	else if (asize <= 128)
-// 		return 2;
-// 	else if (asize <= 256)
-// 		return 3;
-// 	else if (asize <= 512)
-// 		return 4;
-// 	else if (asize <= 1024)
-// 		return 5;
-// 	else if (asize <= 2048)
-// 		return 6;
-// 	else if (asize <= 4096)
-// 		return 7;
-// 	else if (asize <= 8192)
-// 		return 8;
-// 	else if (asize <= 16384)
-// 		return 9;
-// 	else if (asize <= 32768)
-// 		return 10;
-// 	else
-// 		return 11;
-// }
-
-/*
- * Requires:
- *   Valid bin
- *   Valid pointer bp
- *
- * Effects:
- *   Put pointer's memory block in front of linked list for bin
- */
- 
-// static void
-// placeListFront(int bin, void *bp)
-// {
-// 	void *old_bp;
-// 
-// 	/* Find free block of bin*/
-// 	old_bp = (void *) GET((BIN_DIST(bin) + heap_listp));
-// 
-// 	/* Start at head of list */
-// 	if (old_bp != heap_listp) {
-// 		/* Set old head previous to be bp of new block */
-// 		SET_PREV(old_bp, bp);
-// 		/* Set new block next to be old bp */
-// 		SET_NEXT(bp, old_bp);
-// 	}
-// 	else{
-// 		SET_NEXT(bp, heap_listp);
-// 	}
-// 
-// 	/* Set previous of new block to NULL */
-// 	SET_PREV(bp, heap_listp);
-// 	/* Set bin to point to new head */
-// 	SET_NEXT(BIN_DIST(bin) + heap_listp, bp);
-// }
-
 
 /* 
  * The remaining routines are heap consistency checker routines. 
@@ -651,6 +507,8 @@ checkheap(bool verbose)
 		printf("Bad epilogue header: size\n");
 	if (!GET_ALLOC(HDRP(bp)))
 		printf("Bad epilogue header: alloc\n");
+		
+	printf("End of checkheap\n");
 }
 
 /*
@@ -685,6 +543,7 @@ printblock(void *bp)
 /*
  * The last lines of this file configure the behavior of the "Tab" key in
  * emacs.  Emacs has a rudimentary understanding of C syntax and style.  In
+ * particular, depressing the "Tab" key once at the start of a new line will
  * insert as many tabs and/or spaces as are needed for proper indentation.
  */
 
