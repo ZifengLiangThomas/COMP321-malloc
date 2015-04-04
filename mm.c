@@ -38,13 +38,8 @@ team_t team = {
 	"lpm2@rice.edu"
 };
 
-struct node {
-	struct node *next;
-	struct node *previous;
-};
-
 /* Basic constants and macros: */
-#define ASIZE	   8		  /* Number of bytes to align to */
+#define ASIZE	   8		  	  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define QSIZE	   (4 * WSIZE)	  /* Quadword size (bytes) */
@@ -67,11 +62,14 @@ struct node {
 #define HDRP(bp)  ((char *)(bp) - WSIZE)
 #define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
-
-
 /* Given block ptr bp, compute address of next and previous blocks. */
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+#define NEXT_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) +  WSIZE))))
+#define PREV_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) + 2 * WSIZE))))
+
+struct node {
+	struct node *next;
+	struct node *previous;
+};
 
 /* Global variables: */
 static char *heap_listp; /* Pointer to first block */
@@ -83,14 +81,14 @@ static void *extend_heap(size_t words, struct node *next);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
-static void splice(struct node *nodep);
-
 /* Function prototypes for heap consistency checker routines: */
 static void checkblock(void *bp);
 static void checkheap(bool verbose);
 static void printblock(void *bp); 
 
-
+/* Our written helper functions */
+static void placeListFront(int bin, void *bp);
+static void splice(struct node *nodep);
 
 /* 
  * Requires:
@@ -158,6 +156,7 @@ mm_malloc(size_t size)
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
+
 	printf("Start malloc\n");
 	/* Ignore spurious requests. */
 	if (size == 0)
@@ -181,8 +180,10 @@ mm_malloc(size_t size)
 	extendsize = MAX(asize, CHUNKSIZE);
 	if ((bp = extend_heap(extendsize / WSIZE, list_start)) == NULL)  
 		return (NULL);
+
 	place(bp, asize);
 	checkheap(1);
+
 	return (bp);
 } 
 
@@ -205,16 +206,22 @@ mm_free(void *bp)
 
 	/* Free and coalesce the block. */
 	size = GET_SIZE(HDRP(bp));
-	PUT(HDRP(bp), PACK(size, 0));
-	PUT(FTRP(bp), PACK(size, 0));
-	new_node = (struct node *)coalesce(bp);
+	// PUT(HDRP(bp), PACK(size, 0));
+	// PUT(FTRP(bp), PACK(size, 0));
+	// new_node = (struct node *)coalesce(bp);
 	
 	/* Add to beginning of free list after coalescing */
-	new_node->next = list_start;
-	new_node->previous = NULL;
-	list_start->previous = new_node;
-	list_start = new_node;
-	checkheap(1);
+	// new_node->next = list_start;
+	// new_node->previous = NULL;
+	// list_start->previous = new_node;
+	// list_start = new_node;
+	// checkheap(1);
+
+	/* Reset Header and Footer to be free */
+	PUT(HDRP(bp), PACK(size, 0));
+	PUT(FTRP(bp), PACK(size, 0));
+
+	coalesce(bp);
 }
 
 /*
@@ -341,6 +348,7 @@ extend_heap(size_t words, struct node *next)
 
 	/* Allocate an even number of words to maintain alignment. */
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
 	
@@ -390,6 +398,7 @@ find_fit(size_t asize)
 		if (!GET_ALLOC(HDRP(bp)) && asize <= GET_SIZE(HDRP(bp)))
 			return (bp);
 	} */
+
 	/* No fit was found. */
 	return (NULL);
 }
@@ -455,6 +464,73 @@ splice(struct node *nodep)
 	nodep->previous = NULL;
 	printf("End splice\n");
 
+}
+
+/*
+ * Requires:
+ *   asize
+ *
+ * Effects:
+ *   Returns bin where size is less than or equal to bin max
+ */
+int
+findBin(size_t asize)
+{
+	if (asize <= 64)
+		return 0;
+	else if (asize <= 128)
+		return 1;
+	else if (asize <= 256)
+		return 2;
+	else if (asize <= 512)
+		return 3;
+	else if (asize <= 1024)
+		return 4;
+	else if (asize <= 2048)
+		return 5;
+	else if (asize <= 4096)
+		return 6;
+	else if (asize <= 8192)
+		return 7;
+	else if (asize <= 16384)
+		return 8;
+	else if (asize <= 32768)
+		return 9;
+	else
+		return 10;
+}
+
+/*
+ * Requires:
+ *   Valid bin
+ *   Valid pointer bp
+ *
+ * Effects:
+ *   Put pointer's memory block in front of linked list for bin
+ */
+static void
+placeListFront(int bin, void *bp)
+{
+	void *old_bp;
+
+	/* Find free block of bin*/
+	old_bp = (void *) GET((BIN_DIST(bin) + heap_listp));
+
+	/* Start at head of list */
+	if (old_bp != heap_listp) {
+		/* Set old head previous to be bp of new block */
+		SET_PREV(old_bp, bp);
+		/* Set new block next to be old bp */
+		SET_NEXT(bp, old_bp);
+	}
+	else{
+		SET_NEXT(bp, heap_listp);
+	}
+
+	/* Set previous of new block to NULL */
+	SET_PREV(bp, heap_listp);
+	/* Set bin to point to new head */
+	SET_NEXT(BIN_DIST(bin) + heap_listp, bp);
 }
 
 /* 
