@@ -38,13 +38,8 @@ team_t team = {
 	"lpm2@rice.edu"
 };
 
-struct node {
-	struct node *next;
-	struct node *previous;
-};
-
 /* Basic constants and macros: */
-#define ASIZE	   8		  /* Number of bytes to align to */
+#define ASIZE	   8		  	  /* Number of bytes to align to */
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define QSIZE	   (4 * WSIZE)	  /* Quadword size (bytes) */
@@ -67,14 +62,31 @@ struct node {
 #define HDRP(bp)  ((char *)(bp) - WSIZE)
 #define FTRP(bp)  ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
-
-
 /* Given block ptr bp, compute address of next and previous blocks. */
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+#define NEXT_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) +  WSIZE))))
+#define PREV_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) + 2 * WSIZE))))
+
+#define NEXT_PHYS_BLKP(bp) ((char *)(FTRP(bp) + 2 * WSIZE))
+#define PREV_PHYS_BLKP(bp) ((char *)(bp - (GET_SIZE(bp - 2 * WSIZE))))
+
+/* Given block ptr bp, put a pointer into it to the next block in list. */
+#define SET_NEXT(bp, bp2) (PUT(bp, (uint64_t)bp2))
+
+/* Given block ptr bp, put pointer in adjacent block to the previous block */
+#define SET_PREV(bp, bp2) (PUT(bp + WSIZE, (uint64_t)bp2))
+
+/* Given bin number, compute distance from heap_listp to bin*/
+#define BIN_DIST(num) ((num + 1) * WSIZE)
+
+struct node {
+	struct node *next;
+	struct node *previous;
+};
 
 /* Global variables: */
 static char *heap_listp; /* Pointer to first block */
+//static int binNum = 12;
+//char *list_start;
 static struct node *list_start;
 
 /* Function prototypes for internal helper routines: */
@@ -90,10 +102,10 @@ static void printblock(void *bp);
 
 
 /* Function prototypes we added */
+//static void placeListFront(int bin, void *bp);
 static void add_to_front(void *bp);
 static void splice(struct node *nodep);
-
-
+//static int findBin(size_t asize);
 
 
 /* 
@@ -107,25 +119,28 @@ static void splice(struct node *nodep);
 int
 mm_init(void) 
 {
-
 	/* Create the initial empty heap. */
 	
 	//struct node *head;
-	//void *temp;
-	printf("INIT\n");	
+	printf("INIT\n");
+
 	if ((heap_listp = mem_sbrk(3 * WSIZE)) == (void *)-1)
 		return (-1);
+
 	//PUT(heap_listp, 0);                            /* Alignment padding */
 	PUT(heap_listp, PACK(DSIZE, 1)); /* Prologue header */ 
 	PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+
 	printf("Prologue set\n");
 	//temp = heap_listp + (2 * WSIZE);
 	//head = (struct node *)temp;
 	//printf("Initialized head to be two words after the prologue start\n");
+
 	/* Insert the next and previous pointers, the head of the list */
 	/* Can use heap_listp + 2*WSIZE to access head of list */
 	/*PUT(heap_listp + (2 * WSIZE), head.next);
 	PUT(heap_listp + (3 * WSIZE), head.previous);*/
+
 	/*head->previous = head;
 	head->next = head;	
 	list_start = head;*/
@@ -134,10 +149,23 @@ mm_init(void)
 	PUT(heap_listp + (2 * WSIZE), PACK(0, 1));     /* Epilogue header */
 	heap_listp += (WSIZE);
 	printf("Epilogue set\n");
+
+/*	head->previous = head;
+	head->next = head;	
+	list_start = head;
+*/	
+	/* initialize each bin pointer to -1 */
+	/*for (int i = 0; i < binNum; i++) {
+		PUT(heap_listp + ((i + 2) * WSIZE), (uint64_t)(heap_listp + WSIZE));
+	}
+	list_start = heap_listp + ((binNum + 2) * WSIZE); */
+
+	checkheap(1);
+
 	
 	printf("Entering extend heap\n");
 	/* Extend the empty heap with a free block of CHUNKSIZE bytes. */
-	if (extend_heap(CHUNKSIZE / WSIZE) == NULL) {
+	if (extend_heap((CHUNKSIZE + DSIZE) / WSIZE) == NULL) {
 		printf("Failed INIT\n");
 		return (-1);
 	}
@@ -166,6 +194,7 @@ mm_malloc(size_t size)
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
+
 	printf("Start malloc\n");
 	/* Ignore spurious requests. */
 	if (size == 0)
@@ -184,14 +213,15 @@ mm_malloc(size_t size)
 		place(bp, asize);
 		return (bp);
 	}
-	list_start->next = list_start;
-	list_start->previous = list_start;
+
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = MAX(asize, CHUNKSIZE);
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL)  
 		return (NULL);
+
 	place(bp, asize);
 	checkheap(1);
+
 	return (bp);
 } 
 
@@ -214,10 +244,11 @@ mm_free(void *bp)
 
 	/* Free and coalesce the block. */
 	size = GET_SIZE(HDRP(bp));
+
+	/* Reset Header and Footer to be free */
 	PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
-	
-	/* Add to beginning of free list after coalescing */
+	coalesce(bp);
 
 	checkheap(1);
 }
@@ -353,6 +384,7 @@ extend_heap(size_t words)
 
 	/* Allocate an even number of words to maintain alignment. */
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
 	printf("Before extended block is added to the free list\n");
@@ -367,11 +399,18 @@ extend_heap(size_t words)
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
+	
+	/* If list start is NULL, initialize the start to the pointer to the
+	 * added block
+	 */
 	if (list_start == NULL) {
 		list_start = (struct node *)bp;
 		list_start->next = list_start;
 		list_start->previous = list_start;
 	}
+
+	printf("For isolation\n");
+
 	add_to_front(bp);
 	printf("After extended block is added to the free list\n");
 	checkheap(1);
@@ -407,6 +446,7 @@ find_fit(size_t asize)
 		if (!GET_ALLOC(HDRP(bp)) && asize <= GET_SIZE(HDRP(bp)))
 			return (bp);
 	} */
+
 	/* No fit was found. */
 	return (NULL);
 }
@@ -485,6 +525,77 @@ splice(struct node *nodep)
 	printf("End splice\n");
 
 }
+
+/*
+ * Requires:
+ *   asize
+ *
+ * Effects:
+ *   Returns bin where size is less than or equal to bin max
+ */
+// int
+// findBin(size_t asize)
+// {	
+// 	if (asize <= 32)
+// 		return 0;
+// 	else if (asize <= 64)
+// 		return 1;
+// 	else if (asize <= 128)
+// 		return 2;
+// 	else if (asize <= 256)
+// 		return 3;
+// 	else if (asize <= 512)
+// 		return 4;
+// 	else if (asize <= 1024)
+// 		return 5;
+// 	else if (asize <= 2048)
+// 		return 6;
+// 	else if (asize <= 4096)
+// 		return 7;
+// 	else if (asize <= 8192)
+// 		return 8;
+// 	else if (asize <= 16384)
+// 		return 9;
+// 	else if (asize <= 32768)
+// 		return 10;
+// 	else
+// 		return 11;
+// }
+
+/*
+ * Requires:
+ *   Valid bin
+ *   Valid pointer bp
+ *
+ * Effects:
+ *   Put pointer's memory block in front of linked list for bin
+ */
+ 
+// static void
+// placeListFront(int bin, void *bp)
+// {
+// 	void *old_bp;
+// 
+// 	/* Find free block of bin*/
+// 	old_bp = (void *) GET((BIN_DIST(bin) + heap_listp));
+// 
+// 	/* Start at head of list */
+// 	if (old_bp != heap_listp) {
+// 		/* Set old head previous to be bp of new block */
+// 		SET_PREV(old_bp, bp);
+// 		/* Set new block next to be old bp */
+// 		SET_NEXT(bp, old_bp);
+// 	}
+// 	else{
+// 		SET_NEXT(bp, heap_listp);
+// 	}
+// 
+// 	/* Set previous of new block to NULL */
+// 	SET_PREV(bp, heap_listp);
+// 	/* Set bin to point to new head */
+// 	SET_NEXT(BIN_DIST(bin) + heap_listp, bp);
+// }
+
 
 /* 
  * The remaining routines are heap consistency checker routines. 
