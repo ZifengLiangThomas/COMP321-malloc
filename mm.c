@@ -340,11 +340,35 @@ find_fit(size_t asize)
 	//void *bp;
 	struct node *cur = list_start;
 	printf("ENTER FIND FIT\n");
+	if(list_start == NULL) {
+		printf("List is empty, can't find fit\n");
+		return NULL;
+	}
 
 	do {
-		if (!GET_ALLOC(HDRP(cur)) && asize <= GET_SIZE(HDRP(cur)))
+		printf("LOOP\n");
+
+/*		if (cur == NULL)
+			printf("Cur is NULL\n");
+		if (cur->next == NULL)
+			printf("Cur's next is NULL\n"); */
+		
+		if (HDRP(cur) == NULL)
+			printf("Header is NULL\n");
+		
+		printf("Could be here\n");
+		/* [TODO] Fix the bug on the line below*/
+		/* It has something to do with GET_SIZE */
+		if (asize <= GET_SIZE(HDRP(cur)))
+			printf("GET_SIZE if\n");
+		printf("Here?\n");
+		if (!GET_ALLOC(HDRP(cur)))
+			printf("GET_ALLOC is the issue\n");
+		
+		if (!GET_ALLOC(HDRP(cur)) && asize <= GET_SIZE(HDRP(cur))) 
 			return (cur);
 		cur = cur->next;
+		printf("END LOOP\n");
 	} while (cur != list_start);
 	
 	
@@ -419,9 +443,10 @@ add_node(void *bp)
 		printf("Iso 2\n");
 		list_start->previous = nodep;
 		printf("Iso 3\n");
+		list_start = nodep;
 	}
 	
-	list_start = nodep;
+	
 	
 	printf("ADD CHECKHEAP\n");
 	checkheap(1);
@@ -499,7 +524,7 @@ checkheap(bool verbose)
 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
 		if (verbose)
-			printblock(bp);
+		//	printblock(bp);
 		checkblock(bp);
 	}
 
