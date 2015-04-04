@@ -345,23 +345,21 @@ find_fit(size_t asize)
 		return NULL;
 	}
 	if (list_start->next == NULL)
-		printf("List not properly initialized\n");
+		return NULL;
 		
 
 	do {
 		printf("LOOP\n");
 
-/*		if (cur == NULL)
+		if (cur == NULL)
 			printf("Cur is NULL\n");
+		printf("HERE\n");
 		if (cur->next == NULL)
-			printf("Cur's next is NULL\n"); */
+			printf("Cur's next is NULL\n"); 
 		
-		if (cur->next == NULL)
-			printf("cur's next is NULL\n");
+		printf("TEST\n");
 		
 		printf("Could be here\n");
-		/* [TODO] Fix the bug on the line below*/
-		/* It has something to do with GET_SIZE */
 		if (asize <= GET_SIZE(HDRP(cur)))
 			printf("GET_SIZE if\n");
 		printf("Here?\n");
@@ -403,6 +401,8 @@ place(void *bp, size_t asize)
 	printf("ENTER PLACE\n");
 
 	if ((csize - asize) >= (ASIZE + TSIZE)) { 
+		printf("There is enough for a smaller block left over\n");
+		
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		
@@ -435,6 +435,8 @@ add_node(void *bp)
 	if (list_start->next == NULL && list_start->previous == NULL) {	
 		nodep->next = nodep;
 		nodep->previous = nodep;
+		list_start->next = nodep;
+		list_start->previous = nodep;
 	} else {
 		printf("Adding to list\n");
 		nodep->next = list_start;
@@ -451,7 +453,14 @@ add_node(void *bp)
 		list_start = nodep;
 	}
 	
-	
+	if (nodep->next == NULL)
+		printf("Next is NULL\n");
+	if (nodep->previous == NULL)
+		printf("Previous is NULL\n");
+	if (list_start->next == NULL)
+		printf("List start Next is NULL\n");
+	if (list_start->previous == NULL)
+		printf("List start Previous is NULL\n");
 	
 	printf("ADD CHECKHEAP\n");
 	checkheap(1);
@@ -466,6 +475,11 @@ remove_node(void *bp)
 	struct node *nodep = (struct node *)bp;
 	
 	printf("ENTER REMOVE\n");
+	
+	if (list_start == NULL) {
+		printf("Tried to remove from empty list\n");
+		return;
+	}
 	
 	if (nodep == NULL)
 		printf("Node pointer is NULL!\n");
