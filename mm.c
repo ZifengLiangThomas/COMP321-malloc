@@ -66,6 +66,9 @@ team_t team = {
 #define NEXT_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) +  WSIZE))))
 #define PREV_BLKP(bp) ((char *)(GET((char *)(HDRP(bp) + 2 * WSIZE))))
 
+#define NEXT_PHYS_BLKP(bp) ((char *)(FTRP(bp) + 2 * WSIZE))
+#define PREV_PHYS_BLKP(bp) ((char *)(bp - (GET_SIZE(bp - 2 * WSIZE))))
+
 /* Given block ptr bp, put a pointer into it to the next block in list. */
 #define SET_NEXT(bp, bp2) (PUT(bp, (uint64_t)bp2))
 
