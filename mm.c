@@ -402,8 +402,8 @@ add_node(void *bp)
 	printf("ENTER ADD\n");
 	if (nodep == NULL)
 		printf("Node pointer is NULL!\n");
-	if (nodep->next == NULL && nodep->previous == NULL) {
-		printf("List was empty\n");
+	if (list_start == NULL || (list_start->next == NULL && list_start->previous == NULL)) {
+		list_start = nodep;
 		nodep->next = nodep;
 		nodep->previous = nodep;
 	} else {
@@ -413,6 +413,8 @@ add_node(void *bp)
 		printf("Iso 1\n");
 		if(list_start->previous == NULL)
 			printf("List start previous is null\n");
+		if(list_start->next == NULL)
+			printf("List start next is null\n");
 		list_start->previous->next = nodep;
 		printf("Iso 2\n");
 		list_start->previous = nodep;
