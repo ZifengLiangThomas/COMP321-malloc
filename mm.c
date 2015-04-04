@@ -317,8 +317,8 @@ extend_heap(size_t words)
 	/* Initialize free block header/footer and the epilogue header. */
 	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
-	add_node(bp);
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
+	add_node(bp);
 	
 	printf("EXTEND_HEAP CHECKHEAP\n");
 	checkheap(1);
@@ -340,10 +340,13 @@ find_fit(size_t asize)
 	//void *bp;
 	struct node *cur = list_start;
 	printf("ENTER FIND FIT\n");
-	if(list_start == NULL) {
+	if (list_start == NULL) {
 		printf("List is empty, can't find fit\n");
 		return NULL;
 	}
+	if (list_start->next == NULL)
+		printf("List not properly initialized\n");
+		
 
 	do {
 		printf("LOOP\n");
@@ -353,8 +356,8 @@ find_fit(size_t asize)
 		if (cur->next == NULL)
 			printf("Cur's next is NULL\n"); */
 		
-		if (HDRP(cur) == NULL)
-			printf("Header is NULL\n");
+		if (cur->next == NULL)
+			printf("cur's next is NULL\n");
 		
 		printf("Could be here\n");
 		/* [TODO] Fix the bug on the line below*/
@@ -402,10 +405,11 @@ place(void *bp, size_t asize)
 	if ((csize - asize) >= (ASIZE + TSIZE)) { 
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
-		remove_node(bp);
+		
 		bp = NEXT_BLKP(bp);
 		PUT(HDRP(bp), PACK(csize - asize, 0));
 		PUT(FTRP(bp), PACK(csize - asize, 0));
+		remove_node(PREV_BLKP(bp));
 		add_node(bp);
 	} else {
 		PUT(HDRP(bp), PACK(csize, 1));
@@ -426,8 +430,9 @@ add_node(void *bp)
 	printf("ENTER ADD\n");
 	if (nodep == NULL)
 		printf("Node pointer is NULL!\n");
-	if (list_start == NULL || (list_start->next == NULL && list_start->previous == NULL)) {
+	if (list_start == NULL)
 		list_start = nodep;
+	if (list_start->next == NULL && list_start->previous == NULL) {	
 		nodep->next = nodep;
 		nodep->previous = nodep;
 	} else {
@@ -468,11 +473,31 @@ remove_node(void *bp)
 		printf("Node pointer's next is NULL!\n");
 	if (nodep->previous == NULL)
 		printf("Node pointer's previous is NULL!\n");
-		
+	if(nodep == list_start) {
+		printf("Removing start of list, need to update\n");
+		list_start = nodep->previous;
+	}
+	
 	nodep->previous->next = nodep->next;
 	nodep->next->previous = nodep->previous;
 	nodep->next = NULL;
 	nodep->previous = NULL;
+
+
+	/*	
+	if(list_start->next == NULL && list_start->previous == NULL) {
+		printf("List is empty\n");
+		list_start->next = list_start;
+		list_start->previous = list_start;
+	}
+	*/
+	
+	if (list_start == NULL)
+		printf("List start is NULL\n");
+	if (list_start->next == NULL)
+		printf("List start's next is NULL\n");
+	if (list_start->previous == NULL)
+		printf("List start's previous is NULL\n");
 	
 	printf("REMOVE CHECKHEAP\n");
 	checkheap(1);
@@ -523,7 +548,7 @@ checkheap(bool verbose)
 	checkblock(heap_listp);
 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-		if (verbose)
+		//if (verbose)
 		//	printblock(bp);
 		checkblock(bp);
 	}
