@@ -1,7 +1,8 @@
 Xin Huang <xyh1@rice.edu>
 Leo Meister <lpm2@rice.edu>
 COMP 321 Project 5: Malloc Dynamic Memory Allocator
-4/4/15
+4/4/15 (We used the 3 slip days we requested.)
+
 
 DESCRIPTION
 
@@ -9,24 +10,23 @@ DESCRIPTION
 of what the application does from the persepective of someone who
 would use it).>
 
-Our mm.c program essentially performs 3 operations, memory allocation, memory
-freeing, and reallocation. 'mm_malloc' takes size of data as an input and
-returns a pointer in memory where that size of data can be stored until
-explicitly freed from memory. 'mm_free' takes as an input, a pointer in memory and frees
-the block for later re-use. 'mm_realloc' takes as an input a pointer
-that had already been memory allocated and new size and returns a new pointer
-to the memory location that is able to store the new size. It then moves the
-data from the previous input memory block in the new memory block.
+Our mm.c program essentially performs 3 operations: it dynamically allocates, frees, and reallocates memory. The 'mm_malloc' function takes the size of a memory block (in bytes) required by the user as an input and returns a pointer to a memory block of the size requested of usable consecutive bytes. The 'mm_free' function takes as an input a pointer in memory and frees the block it points to, allowing it to be used again for allocation at some later point. The 'mm_realloc' function takes as an input a pointer to an allocated block of memory and a new size and returns a new pointer to a block of usable consecutive bytes of the new size. It then moves the data from the previously used memory block into the new memory block.
+
 
 DESIGN
 
 <insert a detailed description of any appropriate design decisions you
 made, such as data structures, algorithms, etc.>
 
+We implemented a dynamic memory allocator using a segmented explicit free list.
+
+
 TESTING STRATEGY
+
+We wrote our checkheap function to check for X, Y, and Z in addition to the provided checks for the prologue and epilogue.
+
+In addition to the checks we added, we split the provided prologue and epilogue checks to check whether the size and allocated bit were correct separately, since our code produced an invalid epilogue header early on in development.
 
 <insert a detailed description of your testing strategy: at a minimum
 you should explain how you tested your code and why that testing was
 sufficient.>
-
-

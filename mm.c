@@ -45,7 +45,7 @@ team_t team = {
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define TSIZE	   (3 * WSIZE)	  /* Tripleword size (bytes) */
-#define CHUNKSIZE  4108  /* Extend heap by this amount (bytes) */
+#define CHUNKSIZE  4104  /* Extend heap by this amount (bytes) */
 
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))
 
