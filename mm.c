@@ -68,7 +68,7 @@ team_t team = {
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-/* The number of segregated list */
+/* The number of segregated lists */
 #define BIN_NUM  (15)
 /* The smallest seglist range: 1 - 64 bytes*/
 #define BOUND   (128)
