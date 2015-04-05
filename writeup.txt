@@ -18,33 +18,49 @@ DESIGN
 <insert a detailed description of any appropriate design decisions you
 made, such as data structures, algorithms, etc.>
 
-We implemented a dynamic memory allocator using a segmented explicit free lists. To do so, we
+We implemented a dynamic memory allocator using a segmented explicit free list
+. The original heap consists of a prologue header and footer, a number of bins
+that are each heads to a doubly linked list, and an epilogue.
+
+Malloc goes through the bins can contain blocks that can fit
+the size of memory that was inputted. If there's a match then it
+removes the block from the linked list and returns the pointer to it.
+Free works whenever a block of memory is freed, it first checks to see if it
+can coalesce with a block adjacent to it in memory. Otherwise place at the
+front of its respective liked list. This will give us nice big blocks which
+are more useful than many small ones. If no such block exists, then we need
+to extend the heap and return a block of memory for it from there.
+Realloc is basically free and malloc combined. It takes the pointer from input
+to see if it can be coalesced with any adjacent blocks to create a bigger
+block that fills the size requirement. If not, then it extends heap and
+coalesces again to try to fit. Otherwise just malloc and copy data from old
+pointer to new and delete old.
 
 We created four of our own helper functions: they were find_block_list, insert_block, delete_block, and get_list_index. The find_block_list function is used in finding a fit to find a block in a given bin that is greater than or equal to the size of the block requested. The insert_block function inserts the block into the appropriate bin. The delete_block function removes the block from the appropriate bin. The get_list_index function returns the index of the bin corresponding to the size of the given block.
 
-We settled on using 15 lists (bins), where each bin was responsible for blocks of size up to 128 bytes greater than the previous bin [rephrase]. We chose these values by testing which ones produced the greatest total combination of utilization and throughput. To reduce the number of calls to extend heap, we increased our chunk size from 4096 to 4104.
+We settled on using 15 lists (bins), where each bin was responsible for blocks of size up to 128 bytes greater than the previous bin. The bins ensure that all free blocks in its doubly linked list are within the size range specified. We chose these values by testing which ones produced the greatest total combination of utilization and throughput. To reduce the number of calls to extend heap, we increased our chunk size from 4096 to 4104.
 
 
 TESTING STRATEGY
+<insert a detailed description of your testing strategy: at a minimum
+you should explain how you tested your code and why that testing was
+sufficient.>
 
 As we were developing malloc, we included print statements at the start and end of each function and checkheap calls at the end of each function in order to determine what errors were causing the code to segfault and where these errors were occurring.
 
-We wrote our checkheap function to check that every block in our free lists were actually free, that every free block was in a free list, and that only blocks of the appropriate size were being added to the appropriate bins, in addition to the provided checks for the prologue and epilogue. 
+We wrote our checkheap function to check that every block in our free lists were actually free, that every free block was in a free list, and that only blocks of the appropriate size were being added to the appropriate bins, in addition to the provided checks for the prologue and epilogue.
 
-By passing these checks, we confirmed that our implementation of the segregated lists worked at the very least. From there we tweaked the parameters for the segregated lists (number of lists, byte-range for each list) and code to improve performance. We deemed these checks to be sufficient because passing these checks and tweaking our parameters, we were able to get decent throughput and utilisation, even though we were not able to maximize them.
+By passing these checks, we confirmed that our implementation of the segregated lists worked at the very least. From there we tweaked the parameters for the segregated lists (number of lists, byte-range for each list) and code to improve performance. We deemed these checks to be sufficient because passing these checks and tweaking our parameters, we were able to get decent throughput and utilization, even though we were not able to maximize them.
 
 In addition to the checks we added, we split the provided prologue and epilogue checks to check whether the size and allocated bit were correct separately, since our code produced an invalid epilogue header early on in development.
 
 
 	/* Invariance Checks:all blocks in free list actually free
-	 * 		     all free blocks in free list
-	 *		     free blocks escaping coalescing
-	 *		free list pointers point to valid free blocks
-	 *		do any allocated blocks overlap
-	 *		do pointers in heap block point to valid heap addr
+	 *		8 byte alignment
+	 * 		All free blocks in free list
+	 *		Free blocks escaping coalescing
+	 *		Free list pointers point to valid free blocks
+	 *		No allocated blocks overlap
+	 *		Pointers in heap block point to valid heap addr
 	 *		...
 	 */
-
-<insert a detailed description of your testing strategy: at a minimum
-you should explain how you tested your code and why that testing was
-sufficient.>
