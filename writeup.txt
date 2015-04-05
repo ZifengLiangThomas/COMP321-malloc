@@ -29,7 +29,9 @@ TESTING STRATEGY
 
 As we were developing malloc, we included print statements at the start and end of each function and checkheap calls at the end of each function in order to determine what errors were causing the code to segfault and where these errors were occurring.
 
-We wrote our checkheap function to check that every block in our free lists were actually free, that every free block was in a free list, and that only blocks of the appropriate size were being added to the appropriate bins, in addition to the provided checks for the prologue and epilogue. We deemed these checks to be sufficient because 
+We wrote our checkheap function to check that every block in our free lists were actually free, that every free block was in a free list, and that only blocks of the appropriate size were being added to the appropriate bins, in addition to the provided checks for the prologue and epilogue. 
+
+By passing these checks, we confirmed that our implementation of the segregated lists worked at the very least. From there we tweaked the parameters for the segregated lists (number of lists, byte-range for each list) and code to improve performance. We deemed these checks to be sufficient because passing these checks and tweaking our parameters, we were able to get decent throughput and utilisation, even though we were not able to maximize them.
 
 In addition to the checks we added, we split the provided prologue and epilogue checks to check whether the size and allocated bit were correct separately, since our code produced an invalid epilogue header early on in development.
 
