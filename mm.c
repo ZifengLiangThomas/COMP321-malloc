@@ -126,10 +126,14 @@ mm_init(void)
 		bin_list[i] = NULL;
 	}
 
-	PUT(heap_listp + (BIN_NUM * WSIZE), 0); /* Alignment padding */ // This probably should be padded later on when we bin?
-	PUT(heap_listp + ((BIN_NUM + 1) * WSIZE), PACK(DSIZE, 1)); /* Prologue header */
-	PUT(heap_listp + ((BIN_NUM + 2) * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
-	PUT(heap_listp + ((BIN_NUM + 3) * WSIZE), PACK(0, 1));     /* Epilogue header */
+	PUT(heap_listp + (BIN_NUM * WSIZE), 0); /* Alignment padding */
+	
+	/* Prologue header */
+	PUT(heap_listp + ((BIN_NUM + 1) * WSIZE), PACK(DSIZE, 1));
+	/* Prologue footer */
+	PUT(heap_listp + ((BIN_NUM + 2) * WSIZE), PACK(DSIZE, 1));
+	/* Epilogue header */
+	PUT(heap_listp + ((BIN_NUM + 3) * WSIZE), PACK(0, 1));
 
 	heap_listp += ((BIN_NUM + 2) * WSIZE);
 
@@ -159,7 +163,7 @@ mm_malloc(size_t size)
 {
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
-	void *bp;
+	void *bp;	   /* pointer to a block allocated for the user */
 
 	if (ourVerbose)
 		printf("ENTER MALLOC\n");
@@ -195,6 +199,7 @@ mm_malloc(size_t size)
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = MAX(asize, CHUNKSIZE);
 
+	/* Make sure the heap is word aligned */
 	if (extendsize % WSIZE != 0)
 		extendsize = ((extendsize / WSIZE) + 1) * WSIZE;
 
@@ -221,7 +226,7 @@ mm_malloc(size_t size)
 void
 mm_free(void *bp)
 {
-	size_t size;
+	size_t size;	/* the size of the freed block */
 	if (ourVerbose)
 		printf("ENTER FREE\n");
 
@@ -261,8 +266,8 @@ mm_free(void *bp)
 void *
 mm_realloc(void *ptr, size_t size)
 {
-	size_t oldsize;
-	void *newptr;
+	size_t oldsize;	/* The size of the old allocated block */
+	void *newptr;	/* The pointer to the newly allocated block */
 
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
@@ -274,19 +279,18 @@ mm_realloc(void *ptr, size_t size)
 		return (mm_malloc(size));
 
 	/* Align new size to multiples of WSIZE */
-	int new_size = (int)size;
+	int new_size = size;
 	if (new_size % WSIZE != 0)
 		new_size = ((new_size / WSIZE) + 1) * WSIZE;
 	int realloc_asize = new_size + (int)DSIZE;
 
 	/* Size of prev allocated block */
 	oldsize = GET_SIZE(HDRP(ptr));
-	int diffsize = (int)(oldsize - realloc_asize);
+	int diffsize = oldsize - realloc_asize;
 
-
-	if (realloc_asize == (int)oldsize) {
+	/* No need to reallocate if  the size requested was the same */
+	if ((uint)realloc_asize == oldsize)
 		return (ptr);
-	} // end if
 
 	/* New size less than previous allocated size */
 	else if (diffsize > 0) {
@@ -306,7 +310,9 @@ mm_realloc(void *ptr, size_t size)
 
 			return (PREV_BLKP(ptr));
 		}
-		/* New size required less than previous allocated size but can't form a new block */
+		/* New size required less than previous allocated size but 
+		 * can't form a new block 
+		 */
 		else {
 			return (ptr);
 		}
@@ -316,10 +322,11 @@ mm_realloc(void *ptr, size_t size)
 	else if (diffsize < 0) {
 		size_t nextsize = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
 
-		/* Block next to current block free */
+		/* Move block next to current block free */
 		if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr)))) {
 
-			if ((int)nextsize >= (int)(abs(diffsize) + 2 * DSIZE)) {
+			if (nextsize >= 
+			    (abs(diffsize) + 2 * DSIZE)) {
 				delete_block(NEXT_BLKP(ptr));
 
 				PUT(HDRP(ptr), PACK(realloc_asize, 1));
@@ -327,7 +334,7 @@ mm_realloc(void *ptr, size_t size)
 
 				ptr = NEXT_BLKP(ptr);
 
-				int newNextSize = (int)nextsize - abs(diffsize);
+				int newNextSize = nextsize - abs(diffsize);
 
 				PUT(HDRP(ptr), PACK(newNextSize, 0));
 				PUT(FTRP(ptr), PACK(newNextSize, 0));
@@ -339,12 +346,14 @@ mm_realloc(void *ptr, size_t size)
 				return (PREV_BLKP(ptr));
 			}
 			/* Next free block doesn't have enough space */
-			else if ((int)nextsize >= abs(diffsize)) {
+			else if (nextsize >= abs(diffsize)) {
 
 				delete_block(NEXT_BLKP(ptr));
 
-				PUT(HDRP(ptr), PACK((int)(oldsize + nextsize), 1));
-				PUT(FTRP(ptr), PACK((int)(oldsize + nextsize), 1));
+				PUT(HDRP(ptr), PACK((oldsize + nextsize),
+				    1));
+				PUT(FTRP(ptr), PACK((oldsize + nextsize), 
+				    1));
 
 				return (ptr);
 			}
@@ -356,7 +365,8 @@ mm_realloc(void *ptr, size_t size)
 	/* If realloc() fails the original block is left untouched  */
 	if (newptr == NULL)
 		return (NULL);
-
+	
+	/* Copy memory over */
 	if (size < oldsize)
 		oldsize = size;
 	memcpy(newptr, ptr, oldsize);
@@ -387,19 +397,22 @@ mm_realloc(void *ptr, size_t size)
 static void *
 coalesce(void *bp)
 {
+	/* the size of the current block */
 	size_t size = GET_SIZE(HDRP(bp));
+	/* whether the previous block is allocated */
 	bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+	/* whether the next block os allocated */
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
 
 	if (ourVerbose)
 		printf("ENTER COALESCE\n");
-
-	if (prev_alloc && next_alloc) {                 /* Case 1 */
+	/* Case 1: Cannot coalesce */
+	if (prev_alloc && next_alloc) {                 
 		if (ourVerbose)
 			printf("Case 1\n");  // do nothing
 	}
-
-	else if (prev_alloc && !next_alloc) {         /* Case 2 */
+	/* Case 2: Coalesce with the next block */
+	else if (prev_alloc && !next_alloc) {         
 		if (ourVerbose)
 			printf("Case 2\n");
 
@@ -413,8 +426,8 @@ coalesce(void *bp)
 
 		insert_block(bp, size);
 	}
-
-	else if (!prev_alloc && next_alloc) {         /* Case 3 */
+	/* Case 3: Coalesce with the previous block */
+	else if (!prev_alloc && next_alloc) {         
 		if (ourVerbose)
 			printf("Case 3\n");
 
@@ -430,8 +443,8 @@ coalesce(void *bp)
 		insert_block(bp, size);
 
 	}
-
-	else {                                        /* Case 4 */
+	/* Case 4: Coalesce with both next and previous */
+	else {                                       
 		if (ourVerbose)
 			printf("Case 4\n");
 
@@ -466,8 +479,8 @@ coalesce(void *bp)
 static void *
 extend_heap(size_t words)
 {
-	size_t size;
-	void *bp;
+	size_t size;	/* The number of bytes to add to the heap */
+	void *bp;	/* Pointer to the memory added to the heap */
 
 	if (ourVerbose)
 		printf("ENTER EXTEND HEAP\n");
@@ -505,13 +518,17 @@ find_fit(size_t asize)
 {
 
 	if (ourVerbose)
-		printf("FIT YO-SELF\n");
-
-	int i;
+		printf("ENTER FIT\n");
+	
+	struct node *bp; /* The current node in the list */
+	int i; /* counter for iterating through the segregated list */
+	/* index of the segregated list based on the size requested*/
 	int list_idx = get_list_index(asize);
-
-	struct node *bp;
-	/* Search for the first fit from the lists with index lst_idx or bigger */
+	
+	
+	/* Search for the first fit from the lists
+	 * with index lst_idx or bigger 
+	 */
 	for (i = list_idx; i < BIN_NUM; i ++) {
 
 		bp = bin_list[i];
@@ -535,11 +552,14 @@ find_fit(size_t asize)
 static void *
 place(void *bp, size_t asize)
 {
-	size_t csize = GET_SIZE(HDRP(bp));
+	size_t csize = GET_SIZE(HDRP(bp)); /* The size of the given block */
 
 	if (ourVerbose)
 		printf("ENTER PLACE\n");
-
+	
+	/* Split the block if it is large enough to segment
+	 * into two useable blocks
+	 */
 	if ((csize - asize) >= (WSIZE + TSIZE)) {
 		delete_block(bp);
 
@@ -551,7 +571,7 @@ place(void *bp, size_t asize)
 		insert_block(bp, (int)(csize - asize));
 
 	}
-
+	/* Allocate the block in its entirety */
 	else {
 		delete_block(bp);
 		PUT(HDRP(bp), PACK(csize, 1));
@@ -568,11 +588,11 @@ place(void *bp, size_t asize)
 
 /*
  * Requires:
- *	Valid bp
- *  Valid size
+ *	Valid pointer to a node in one of the segregated free lists
+ *  	Valid block size
  *
  * Effects:
- * 	Find block size in bins where block size is >= to asize
+ * 	Find block size in the bin, where block size is >= to asize
  */
 static void *
 find_block_list(struct node *bp, int asize)
@@ -580,7 +600,10 @@ find_block_list(struct node *bp, int asize)
 
 	assert(asize > 0);
 	size_t block_size;
-
+	
+	/* Iterate through the free list pointed to by bp searching for
+	 * a suitable free block
+	 */
 	while (bp != NULL) {
 		block_size = GET_SIZE(HDRP(bp));
 		if ((int) block_size >= asize)
@@ -593,9 +616,10 @@ find_block_list(struct node *bp, int asize)
 
 /*
  * Requires:
- *	valid size
+ *	valid block size
  * Effects:
- *	Return seglist index of block size
+ *	Return the index of the appropriate segregated list
+ *	based on the given block size
  */
 static int
 get_list_index(int size)
@@ -603,9 +627,12 @@ get_list_index(int size)
 
 	assert(size >= 0);
 
-	int count = size;
+	int count = size; /* The  */
 	int list;
-
+	
+	/* Iterate through the list of lists looking for the
+	 * appropriate bin given the size
+	 */
 	for (list = 0; list < BIN_NUM; list++) {
 		if ((count <= BOUND) || (list == BIN_NUM - 1)) {
 			return list;
@@ -620,9 +647,9 @@ get_list_index(int size)
 
 /*
  * Requires:
- *	valid bp
+ *	valid pointer to a node in one of the segregated free lists
  * Effects:
- * 	Insert block bp to a specific seglist
+ * 	Insert block bp to the appropriate segregated list
  * 	Insertion order will base on block size
  */
 static void
@@ -632,7 +659,7 @@ insert_block(void *bp, int size)
 	assert(bp != NULL);
 	assert(size == (int)GET_SIZE(HDRP(bp)));
 
-	int list_idx;
+	int list_idx; /* The index of the appropriate segregated list */
 	struct node *new_block, *start_block = NULL;
 
 	list_idx = get_list_index(size);
@@ -641,13 +668,13 @@ insert_block(void *bp, int size)
 	start_block = bin_list[list_idx];
 
 	new_block = bp;
-	/* seglist been insert into is empty */
+	/* seglist to be inserted into is empty */
 	if (start_block == NULL) {
 		new_block->prev = NULL;
 		new_block->next = NULL;
 		bin_list[list_idx] = new_block;
 	}
-	/* seglist been insert into is not empty */
+	/* seglist to be inserted into is not empty */
 	else {
 		new_block->prev = NULL;
 		new_block->next = start_block;
@@ -659,9 +686,9 @@ insert_block(void *bp, int size)
 
 /*
  * Requires:
- *	Valid BP
+ *	Valid block pointer
  * Effects:
- * 	Remove block bp from the specific seglist
+ * 	Remove block bp from its segregated list
  */
 static void
 delete_block(void *bp)
