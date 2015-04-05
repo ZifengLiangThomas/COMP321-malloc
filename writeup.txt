@@ -1,7 +1,8 @@
 Xin Huang <xyh1@rice.edu>
 Leo Meister <lpm2@rice.edu>
 COMP 321 Project 5: Malloc Dynamic Memory Allocator
-4/4/15 (We used the 3 slip days we requested.)
+4/4/15
+Slip days: We used and requested 3 slip days.
 
 
 DESCRIPTION
