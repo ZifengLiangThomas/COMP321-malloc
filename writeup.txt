@@ -20,13 +20,13 @@ With these data structures and functionality in place, we were able to create a 
 
 There were two parameters that needed to be determined for our segmented free lists, the number of free lists (bins) and the range of values for each bin. We settled on using 15 lists (bins), where each bin was responsible for a range of 128 bytes. We chose these values by testing which ones produced the greatest total combination of utilization and throughput; we tested the number of bins ranging from 1 to 30 as well as 50 and 100, and we tested the bin size at powers of 2 from 16 to 256. To reduce the number of calls to extend heap, we increased our chunk size from 4096 to 4104.
 
-Another design decision was to coalesce after freeing.
+Another design decision was to coalesce after freeing. We also decided to split free blocks if the first fit was large enough to be useful after splitting.
 
 TESTING STRATEGY
 
 As we were developing malloc, we included print statements at the start and end of each function and checkheap calls at the end of each function in order to determine what errors were causing the code to segfault and where these errors were occurring. These statements can only be reached by setting the "ourVerbose" flag equal to true.
 
-We wrote our checkheap function to check that every block in our free lists was actually free, that every free block was in a free list, and that contiguous free blocks were properly coalesced. In addition, it included the provided checks for the prologue and epilogue. 
+We wrote our checkheap function to check that every block in our free lists was actually free, that every free block was in the appropriate free list, and that contiguous free blocks were properly coalesced. To do this, it checks the allocation bit of each block in the free lists, it checks through the corresponding free list for each free block in the heap, and it checks for contiguous free blocks (there should not be multiple free blocks in a row), respectively. In addition, it included the provided checks for the prologue and epilogue. 
 
 By passing these checks, we confirmed that our implementation of the segregated lists worked. From there we tweaked the parameters for the segregated lists (number of lists, byte-range for each list) and code to improve performance. We deemed these checks to be sufficient because passing these checks and tweaking our parameters, we were able to get decent throughput and utilisation, even though we were not able to maximize them (in fact, we found a few instances where there were contiguous free blocks not coalesced as they should have been).
 
