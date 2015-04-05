@@ -68,9 +68,8 @@ team_t team = {
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-/* The number of segregated list */
+/* The number of bins (segregated list) */
 #define BIN_NUM  (15)
-/* The smallest seglist range: 1 - 64 bytes*/
 #define BOUND   (128)
 
 struct node {
@@ -92,6 +91,7 @@ static void *place(void *bp, size_t asize);
 static void checkblock(void *bp);
 static void checkheap(bool verbose);
 static void printblock(void *bp);
+static void verifyfreeblock(void *bp);
 
 /* Our added functionality*/
 static void *find_block_list(struct node *bp, int asize);
@@ -728,10 +728,40 @@ static void
 checkblock(void *bp)
 {
 
-	if ((uintptr_t)bp % ASIZE)
+	if ((uintptr_t)bp % WSIZE) {
 		printf("Error: %p is not word aligned\n", bp);
-	if (GET(HDRP(bp)) != GET(FTRP(bp)))
+		if (verbose)
+			printblock(bp);
+	}
+	if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+		if (verbose)
+			printblock(bp);
 		printf("Error: header does not match footer\n");
+	}
+}
+
+static void
+verifyfreeblock(void *bp)
+{
+	// Check Free blocks
+	if ((uintptr_t)bp % WSIZE) {
+		printf("Error: %p not DWORD aligned!\n", bp);
+		if (verbose)
+			printblock(bp);
+		exit(1);
+	}
+	if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+		printf("Error: Header Footer mismatch!\n");
+		if (verbose)
+			printblock(bp);
+		exit(1);
+	}
+	if ((int)GET_ALLOC(HDRP(bp)) != 0) {
+		printf("Error: Free block not marked as free!\n");
+		if (verbose)
+			printblock(bp);
+		exit(1);
+	}
 }
 
 /*
@@ -744,7 +774,9 @@ checkblock(void *bp)
 void
 checkheap(bool verbose)
 {
+	printf("ENTER CHECKHEAP\n");
 	void *bp;
+	int i;
 
 	if (verbose)
 		printf("Heap (%p):\n", heap_listp);
@@ -757,18 +789,46 @@ checkheap(bool verbose)
 
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
 		if (verbose)
-		//	printblock(bp);
+			printblock(bp);
 		checkblock(bp);
 	}
 
-	if (verbose)
-		printblock(bp);
-	if (GET_SIZE(HDRP(bp)) != 0)
+	if (GET_SIZE(HDRP(bp)) != 0) {
+		if (verbose)
+			printblock(bp);
 		printf("Bad epilogue header: size\n");
-	if (!GET_ALLOC(HDRP(bp)))
+	}
+	if (!GET_ALLOC(HDRP(bp))) {
+		if (verbose)
+			printblock(bp);
 		printf("Bad epilogue header: alloc\n");
+	}
 
-	printf("End of checkheap\n");
+	// verify free blocks marked as free
+	for (i = 0; i < BIN_NUM; i ++) {
+		bp = bin_list[i];
+		while (bp != NULL) {
+			if ((int)GET_ALLOC(HDRP(bp)) != 0 ||
+				(int)GET_ALLOC(FTRP(bp)) != 0) {
+					printf("Error: Free block not marked as free!\n");
+				if (verbose)
+					printblock(bp);
+				exit(1);
+			}
+
+			// Verify pointers
+			struct node *next_block = bp->next;
+			struct node *prev_block = bp->prev;
+			if (next_block != NULL)
+				verifyfreeblock(next_block);
+			if (prev_block != NULL)
+				verifyfreeblock(prev_block);
+
+			bp = bp->next;
+		}
+	}
+
+	printf("END CHECKHEAP\n");
 
 	/* Invariance Checks:all blocks in free list actually free
 	 * 		     all free blocks in free list
