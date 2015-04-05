@@ -7,7 +7,7 @@ Slip days: We used and requested 3 slip days.
 
 DESCRIPTION
 
-Our mm.c program essentially performs 3 operations: it dynamically allocates, frees, and reallocates memory. The 'mm_malloc' function takes the size of a memory block (in bytes) required by the user as an input and returns a pointer to a memory block of usable consecutive bytes of the size requested. The 'mm_free' function takes as an input a pointer to the heap and frees the block it points to, allowing the block to be used again for allocation at some later point. The 'mm_realloc' function takes as an input a pointer to an allocated block of memory and a new size. It returns a new pointer to a block of usable consecutive bytes of the new size. It then moves the data from the previously used memory block into the new memory block.
+Our mm.c program essentially performs 3 operations: it dynamically allocates, frees, and reallocates memory. The 'mm_malloc' function takes the size of a memory block (in bytes) required by the user as an input and returns a pointer to a memory block of usable consecutive bytes of the size requested. The 'mm_free' function takes as an input a pointer to the heap and frees the block it points to, allowing the block to be used again for allocation at some later point. The 'mm_realloc' function takes as an input a pointer to an allocated block of memory and a new size. It returns a pointer to a block of usable consecutive bytes of the new size. It then moves the data from the previously used memory block into the new memory block.
 
 
 DESIGN
@@ -20,6 +20,7 @@ With these data structures and functionality in place, we were able to create a 
 
 There were two parameters that needed to be determined for our segmented free lists, the number of free lists (bins) and the range of values for each bin. We settled on using 15 lists (bins), where each bin was responsible for a range of 128 bytes. We chose these values by testing which ones produced the greatest total combination of utilization and throughput; we tested the number of bins ranging from 1 to 30 as well as 50 and 100, and we tested the bin size at powers of 2 from 16 to 256. To reduce the number of calls to extend heap, we increased our chunk size from 4096 to 4104.
 
+Another design decision was to coalesce after freeing.
 
 TESTING STRATEGY
 

@@ -79,8 +79,11 @@ struct node {
 };
 
 /* Global variables: */
+
+/* Pointer to the first of the segregated list headers, sequentially ordered*/
+static void **bin_list; 
 static char *heap_listp; /* Pointer to first block */
-static void **bin_list;
+bool ourVerbose = false; /* Set to true to allow checkheap calls */
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
@@ -100,7 +103,7 @@ static void insert_block(void *bp, int size);
 static void delete_block(void *bp);
 static int get_list_index(int size);
 
-bool ourVerbose = false; /* Set to true to allow checkheap calls */
+
 
 /*
  * Requires:
@@ -162,10 +165,10 @@ mm_init(void)
 void *
 mm_malloc(size_t size)
 {
+	void *bp;	   /* pointer to a block allocated for the user */
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
-	void *bp;	   /* pointer to a block allocated for the user */
-
+	
 	if (ourVerbose)
 		printf("ENTER MALLOC\n");
 
@@ -228,6 +231,7 @@ void
 mm_free(void *bp)
 {
 	size_t size;	/* the size of the freed block */
+	
 	if (ourVerbose)
 		printf("ENTER FREE\n");
 
@@ -267,9 +271,12 @@ mm_free(void *bp)
 void *
 mm_realloc(void *ptr, size_t size)
 {
-	size_t oldsize;	/* The size of the old allocated block */
 	void *newptr;	/* The pointer to the newly allocated block */
-
+	int diffsize;	/*The size difference between the old and new blocks*/
+	int new_size = size; /* The size casted to an integer */
+	int realloc_asize; /* The size of the block to reallocate to */
+	size_t oldsize;	/* The size of the old allocated block */
+	
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
 		mm_free(ptr);
@@ -280,14 +287,13 @@ mm_realloc(void *ptr, size_t size)
 		return (mm_malloc(size));
 
 	/* Align new size to multiples of WSIZE */
-	int new_size = size;
 	if (new_size % WSIZE != 0)
 		new_size = ((new_size / WSIZE) + 1) * WSIZE;
-	int realloc_asize = new_size + (int)DSIZE;
+	realloc_asize = new_size + (int)DSIZE;
 
 	/* Size of prev allocated block */
 	oldsize = GET_SIZE(HDRP(ptr));
-	int diffsize = oldsize - realloc_asize;
+	diffsize = oldsize - realloc_asize;
 
 	/* No need to reallocate if  the size requested was the same */
 	if ((uint)realloc_asize == oldsize)
@@ -651,7 +657,7 @@ get_list_index(int size)
  *	valid pointer to a node in one of the segregated free lists
  * Effects:
  * 	Insert block bp to the appropriate segregated list
- * 	Insertion order will base on block size
+ * 	Insertion order is based on block size
  */
 static void
 insert_block(void *bp, int size)
@@ -687,7 +693,7 @@ insert_block(void *bp, int size)
 
 /*
  * Requires:
- *	Valid block pointer
+ *	Valid pointer to a block in one of the segregated free lists
  * Effects:
  * 	Remove block bp from its segregated list
  */
@@ -697,9 +703,9 @@ delete_block(void *bp)
 
 	assert(bp != NULL);
 
-	struct node *current;
-	struct node *smaller;
-	struct node *bigger;
+	struct node *current;	/* the node to delete */
+	struct node *smaller;	/* the node after the current node */
+	struct node *bigger;	/* the node before the current node */
 
 	int list_idx;
 	size_t block_size;
@@ -771,7 +777,8 @@ checkblock(void *bp)
 			printblock(bp);
 		printf("Error: header does not match footer\n");
 	}
-
+	
+	/* Further checks if the block is free */
 	if ((int)GET_ALLOC(HDRP(bp)) == 0) {
 		/* Check free blocks that escaped coalescing */
 		if ((int)GET_ALLOC(HDRP(PREV_BLKP(bp))) != 1 ||
