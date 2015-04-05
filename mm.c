@@ -68,11 +68,7 @@ team_t team = {
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-<<<<<<< HEAD
-/* The number of segregated lists */
-=======
 /* The number of bins (segregated list) */
->>>>>>> a57c8837d5a8e7bfc26638813bd96a8a3e70990d
 #define BIN_NUM  (15)
 #define BOUND   (128)
 
@@ -918,3 +914,4 @@ printblock(void *bp)
 /* c-continued-statement-offset: 4 */
 /* indent-tabs-mode: t */
 /* End: */
+
