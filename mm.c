@@ -131,7 +131,7 @@ mm_init(void)
 	PUT(heap_listp + ((BIN_NUM + 2) * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
 	PUT(heap_listp + ((BIN_NUM + 3) * WSIZE), PACK(0, 1));     /* Epilogue header */
 
-	heap_listp += ((BIN_NUM + 4) * WSIZE);
+	heap_listp += ((BIN_NUM + 2) * WSIZE);
 
 	if (ourVerbose) {
 		printf("INIT CHECKHEAP\n");
@@ -751,7 +751,7 @@ checkblock(void *bp)
 		int list_idx = get_list_index(GET_SIZE(HDRP(bp)));
 		struct node *binl = bin_list[list_idx];
 
-		while (binl != NULL) {
+		while (binl != NULL) { // Go through all
 			if (binl == bp)
 				binlflag = true;
 			binl = binl->next;
@@ -763,6 +763,13 @@ checkblock(void *bp)
 	}
 }
 
+/*
+ * Requires:
+ *   Valid BP
+ *
+ * Effects:
+ *   Check free block consistency
+ */
 static void
 verifyfreeblock(void *bp)
 {
@@ -829,9 +836,9 @@ checkheap(bool verbose)
 	}
 
 	// verify free blocks marked as free
-	for (i = 0; i < BIN_NUM; i ++) {
+	for (i = 0; i < BIN_NUM; i ++) { // Go through all
 		vbp = bin_list[i];
-		while (vbp != NULL) {
+		while (vbp != NULL) {  // check free list for consistency
 			if ((int)GET_ALLOC(HDRP(vbp)) != 0 ||
 				(int)GET_ALLOC(FTRP(vbp)) != 0) {
 					printf("Error: Free block not marked as free!\n");
@@ -840,7 +847,7 @@ checkheap(bool verbose)
 				exit(1);
 			}
 
-			// Verify pointers
+			// Verify pointers in free list to free blocks
 			struct node *next_block = vbp->next;
 			struct node *prev_block = vbp->prev;
 			if (next_block != NULL)
