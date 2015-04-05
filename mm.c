@@ -68,10 +68,11 @@ team_t team = {
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-/* The number of bins (segregated list) */
+/* The number of bins (segregated lists) */
 #define BIN_NUM  (15)
 #define BOUND   (128)
 
+/* The node structure for our segregated, doubly linked lists */
 struct node {
 	struct node *next;
 	struct node *prev;
@@ -99,7 +100,7 @@ static void insert_block(void *bp, int size);
 static void delete_block(void *bp);
 static int get_list_index(int size);
 
-bool ourVerbose = false;
+bool ourVerbose = false; /* Set to true to allow checkheap calls */
 
 /*
  * Requires:
@@ -750,6 +751,10 @@ delete_block(void *bp)
  *
  * Effects:
  *   Perform a minimal check on the block "bp".
+ *	-Checks to make sure they are word aligned
+ *	-Checks to make sure that the header and footers of the block match
+ *	-Checks for blocks that escaped coalescing
+ *	-Checks that all free blocks are in a free list
  */
 static void
 checkblock(void *bp)
@@ -772,7 +777,7 @@ checkblock(void *bp)
 		if ((int)GET_ALLOC(HDRP(PREV_BLKP(bp))) != 1 ||
 			(int)GET_ALLOC(HDRP(NEXT_BLKP(bp))) != 1) {
 			printf("Error: Contiguous free block escaped the coals!\n");
-			exit(1);
+			//exit(1);
 		}
 		/* verify every free block actually in the free list */
 		int list_idx = get_list_index(GET_SIZE(HDRP(bp)));
@@ -792,17 +797,20 @@ checkblock(void *bp)
 
 /*
  * Requires:
- *   Valid BP
+ *   Valid block pointer to a free block
  *
  * Effects:
  *   Check free block consistency
+ *	-Checks to make sure they are word aligned
+ *	-Checks to make sure that the header and footers of the block match
+ *	-Checks to make sure the block is marked as free
  */
 static void
 verifyfreeblock(void *bp)
 {
 	// Check Free blocks
 	if ((uintptr_t)bp % WSIZE) {
-		printf("Error: %p not DWORD aligned!\n", bp);
+		printf("Error: %p not WORD aligned!\n", bp);
 		if (ourVerbose)
 			printblock(bp);
 		exit(1);
@@ -823,10 +831,15 @@ verifyfreeblock(void *bp)
 
 /*
  * Requires:
- *   None.
+ *   Verbose flag for additional output if desired
  *
  * Effects:
- *   Perform a minimal check of the heap for consistency.
+ *   Perform a check of the heap for consistency.
+ *	-Checks the epilogue header and prologue header and footer
+ *	-Verifies free block validity
+ *	-Checks to make sure all free blocks are in the free lists
+ *	-Checks to make sure all the blocks in the free lists are free
+ *	-Checks to make sure blocks are properly coalesced
  */
 void
 checkheap(bool verbose)
@@ -838,19 +851,21 @@ checkheap(bool verbose)
 
 	if (verbose)
 		printf("Heap (%p):\n", heap_listp);
-
+	/* Verify prologue validity */
 	if (GET_SIZE(HDRP(heap_listp)) != DSIZE)
 		printf("Bad prologue header: size\n");
 	if (!GET_ALLOC(HDRP(heap_listp)))
 		printf("Bad prologue header: alloc\n");
 	checkblock(heap_listp);
 
+	/* Check all blocks in the heap */
 	for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
 		if (verbose)
 			printblock(bp);
 		checkblock(bp);
 	}
-
+	
+	/* Verify epilogue validity */
 	if (GET_SIZE(HDRP(bp)) != 0) {
 		if (verbose)
 			printblock(bp);
@@ -868,7 +883,8 @@ checkheap(bool verbose)
 		while (vbp != NULL) {  // check free list for consistency
 			if ((int)GET_ALLOC(HDRP(vbp)) != 0 ||
 				(int)GET_ALLOC(FTRP(vbp)) != 0) {
-					printf("Error: Free block not marked as free!\n");
+					printf("Error: Free block not marked "
+					    "as free!\n");
 				if (verbose)
 					printblock(vbp);
 				exit(1);
@@ -887,15 +903,6 @@ checkheap(bool verbose)
 	}
 
 	printf("END CHECKHEAP\n");
-
-	/* Invariance Checks:all blocks in free list actually free
-	 * 		     all free blocks in free list
-	 *		     free blocks escaping coalescing
-	 *		free list pointers point to valid free blocks
-	 *		do any allocated blocks overlap
-	 *		do pointers in heap block point to valid heap addr
-	 *		...
-	 */
 }
 
 /*
