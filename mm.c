@@ -727,16 +727,39 @@ delete_block(void *bp)
 static void
 checkblock(void *bp)
 {
+	bool binlflag = false;
 
 	if ((uintptr_t)bp % WSIZE) {
 		printf("Error: %p is not word aligned\n", bp);
-		if (verbose)
+		if (ourVerbose)
 			printblock(bp);
 	}
 	if (GET(HDRP(bp)) != GET(FTRP(bp))) {
-		if (verbose)
+		if (ourVerbose)
 			printblock(bp);
 		printf("Error: header does not match footer\n");
+	}
+
+	if ((int)GET_ALLOC(HDRP(bp)) == 0) {
+		/* Check free blocks that escaped coalescing */
+		if ((int)GET_ALLOC(HDRP(PREV_BLKP(bp))) != 1 ||
+			(int)GET_ALLOC(HDRP(NEXT_BLKP(bp))) != 1) {
+			printf("Error: Contiguous free block escaped the coals!\n");
+			exit(1);
+		}
+		/* verify every free block actually in the free list */
+		int list_idx = get_list_index(GET_SIZE(HDRP(bp)));
+		struct node *binl = bin_list[list_idx];
+
+		while (binl != NULL) {
+			if (binl == bp)
+				binlflag = true;
+			binl = binl->next;
+		}
+		if (binlflag == false) {
+			printf("Error: Free block not there?!!?\n");
+			exit(1);
+		}
 	}
 }
 
@@ -746,19 +769,19 @@ verifyfreeblock(void *bp)
 	// Check Free blocks
 	if ((uintptr_t)bp % WSIZE) {
 		printf("Error: %p not DWORD aligned!\n", bp);
-		if (verbose)
+		if (ourVerbose)
 			printblock(bp);
 		exit(1);
 	}
 	if (GET(HDRP(bp)) != GET(FTRP(bp))) {
 		printf("Error: Header Footer mismatch!\n");
-		if (verbose)
+		if (ourVerbose)
 			printblock(bp);
 		exit(1);
 	}
 	if ((int)GET_ALLOC(HDRP(bp)) != 0) {
 		printf("Error: Free block not marked as free!\n");
-		if (verbose)
+		if (ourVerbose)
 			printblock(bp);
 		exit(1);
 	}
@@ -776,6 +799,7 @@ checkheap(bool verbose)
 {
 	printf("ENTER CHECKHEAP\n");
 	void *bp;
+	struct node *vbp;
 	int i;
 
 	if (verbose)
@@ -806,25 +830,25 @@ checkheap(bool verbose)
 
 	// verify free blocks marked as free
 	for (i = 0; i < BIN_NUM; i ++) {
-		bp = bin_list[i];
-		while (bp != NULL) {
-			if ((int)GET_ALLOC(HDRP(bp)) != 0 ||
-				(int)GET_ALLOC(FTRP(bp)) != 0) {
+		vbp = bin_list[i];
+		while (vbp != NULL) {
+			if ((int)GET_ALLOC(HDRP(vbp)) != 0 ||
+				(int)GET_ALLOC(FTRP(vbp)) != 0) {
 					printf("Error: Free block not marked as free!\n");
 				if (verbose)
-					printblock(bp);
+					printblock(vbp);
 				exit(1);
 			}
 
 			// Verify pointers
-			struct node *next_block = bp->next;
-			struct node *prev_block = bp->prev;
+			struct node *next_block = vbp->next;
+			struct node *prev_block = vbp->prev;
 			if (next_block != NULL)
 				verifyfreeblock(next_block);
 			if (prev_block != NULL)
 				verifyfreeblock(prev_block);
 
-			bp = bp->next;
+			vbp = vbp->next;
 		}
 	}
 
